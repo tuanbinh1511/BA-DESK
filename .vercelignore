@@ -4,6 +4,7 @@ server/
 scripts/
 artifacts/
 .playwright-mcp/
+.codegraph
 node_modules/
 dist/
 

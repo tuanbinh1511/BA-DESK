@@ -175,6 +175,8 @@ async def account_context(request: Request):
 
 REMOTE_MODE = os.environ.get('BA_DESK_REMOTE_MODE', 'local').strip()
 REMOTE_LOGIN = os.environ.get('BA_DESK_TAILSCALE_LOGIN', '').strip()
+REMOTE_ADMINS = {value.strip() for value in os.environ.get('BA_DESK_TAILSCALE_ADMINS', '').split(',') if value.strip()} | {REMOTE_LOGIN}
+REMOTE_VIEWERS = {value.strip() for value in os.environ.get('BA_DESK_TAILSCALE_VIEWERS', '').split(',') if value.strip()}
 REMOTE_HOSTS = [value.strip() for value in os.environ.get('BA_DESK_ALLOWED_HOSTS', '').split(',') if value.strip()]
 REMOTE_ORIGINS = [value.strip().rstrip('/') for value in os.environ.get('BA_DESK_ALLOWED_ORIGINS', '').split(',') if value.strip()]
 
@@ -207,7 +209,8 @@ app.add_middleware(
 async def local_only(request: Request, call_next):
     origin = request.headers.get('origin')
     if REMOTE_MODE == 'tailscale':
-        if request.headers.get('tailscale-user-login') != REMOTE_LOGIN:
+        login = request.headers.get('tailscale-user-login')
+        if login not in REMOTE_ADMINS and login not in REMOTE_VIEWERS:
             return JSONResponse(
                 {'detail': 'Chỉ tài khoản Tailscale được cấu hình mới được truy cập.'},
                 status_code=403,
@@ -215,6 +218,8 @@ async def local_only(request: Request, call_next):
             )
         if origin and origin not in REMOTE_ORIGINS:
             return JSONResponse({'detail': 'Origin không được phép.'}, status_code=403)
+        if login not in REMOTE_ADMINS and request.method not in ('GET', 'HEAD'):
+            return JSONResponse({'detail': 'Tài khoản này chỉ có quyền xem. Chỉ chủ sở hữu hoặc quản trị viên được thay đổi dữ liệu.'}, status_code=403, headers={'Cache-Control': 'no-store'})
     elif origin:
         parsed = urlparse(origin)
         if parsed.hostname not in ('localhost', '127.0.0.1') or parsed.scheme not in ('http', 'https'):

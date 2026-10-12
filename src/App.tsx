@@ -1,20 +1,11 @@
-import { flushSync } from "react-dom";
-import { GroupsPage } from "./pages/GroupsPage";
-import { LibraryPage } from "./pages/LibraryPage";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { AIStatus } from "./components/AIStatus";
 import { ReportPreview } from "./components/ReportPreview";
 import { TaskDetail } from "./components/TaskDetail";
 import { Empty } from "./components/WorkspaceUI";
 import { download } from "./utils/files";
 
-import { OverviewPage } from "./pages/OverviewPage";
-import { TasksPage } from "./pages/TasksPage";
-import { InboxPage } from "./pages/InboxPage";
-import { CalendarPage } from "./pages/CalendarPage";
-import { ReportsPage } from "./pages/ReportsPage";
-import { ToolkitPage } from "./pages/ToolkitPage";
-import { SettingsPage } from "./pages/SettingsPage";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 
 import {
   ArrowRight,
@@ -72,8 +63,20 @@ import {
   today,
 } from "./utils/dates";
 
+const GroupsPage = lazy(() => import("./pages/GroupsPage").then((module) => ({ default: module.GroupsPage })));
+const LibraryPage = lazy(() => import("./pages/LibraryPage").then((module) => ({ default: module.LibraryPage })));
+const OverviewPage = lazy(() => import("./pages/OverviewPage").then((module) => ({ default: module.OverviewPage })));
+const TasksPage = lazy(() => import("./pages/TasksPage").then((module) => ({ default: module.TasksPage })));
+const InboxPage = lazy(() => import("./pages/InboxPage").then((module) => ({ default: module.InboxPage })));
+const CalendarPage = lazy(() => import("./pages/CalendarPage").then((module) => ({ default: module.CalendarPage })));
+const ReportsPage = lazy(() => import("./pages/ReportsPage").then((module) => ({ default: module.ReportsPage })));
+const ToolkitPage = lazy(() => import("./pages/ToolkitPage").then((module) => ({ default: module.ToolkitPage })));
+const SettingsPage = lazy(() => import("./pages/SettingsPage").then((module) => ({ default: module.SettingsPage })));
+const IntroducePage = lazy(() => import("./pages/IntroducePage").then((module) => ({ default: module.IntroducePage })));
+
 const nav: { id: Page; title: string; icon: Icon }[] = [
   { id: "overview", title: "Tổng quan", icon: SquaresFour },
+  { id: "introduce", title: "Introduce · Khí chất BA", icon: Sparkle },
   { id: "tasks", title: "Công việc", icon: CheckSquare },
   { id: "inbox", title: "Hộp thư Telegram", icon: ChatCircleDots },
   { id: "groups", title: "Nhóm Telegram", icon: TelegramLogo },
@@ -84,6 +87,7 @@ const nav: { id: Page; title: string; icon: Icon }[] = [
 ];
 
 export default function App() {
+  const reducedMotion = useReducedMotion();
   const [page, setPage] = useState<Page>("overview"),
     [day, setDay] = useState(today);
   const {
@@ -181,13 +185,7 @@ export default function App() {
   }
   function navigate(next: Page) {
     if (next !== "calendar" && day > today()) setDay(today());
-    if (
-      !isMobile &&
-      document.startViewTransition &&
-      !window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    )
-      document.startViewTransition(() => flushSync(() => setPage(next)));
-    else setPage(next);
+    setPage(next);
     setFilter("all");
     setQuery("");
     setMenuOpen(false);
@@ -507,6 +505,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#workspace-main">Đi đến nội dung</a>
       {menuOpen && (
         <div className="sidebar-overlay" onClick={() => setMenuOpen(false)} />
       )}
@@ -526,13 +525,13 @@ export default function App() {
           </span>
           <span>
             ba<span className="brand-light">desk</span>
-            <small>RÕ VIỆC, NHẸ ĐẦU.</small>
+            <small>Xinh gái, có khí chất.</small>
           </span>
         </button>
         <div className="workspace-label">
           <span className="workspace-icon">B</span>
           <span>
-            Không gian của tôi<small>Senior Business Analyst</small>
+            Không gian của tôi<small>Business Analyst, theo cách riêng</small>
           </span>
           <CaretRight size={14} />
         </div>
@@ -556,7 +555,6 @@ export default function App() {
               {id === "inbox" && waiting.length > 0 && (
                 <span className="nav-dot" />
               )}
-              {id === "toolkit" && <small className="new-label">NEW</small>}
             </button>
           ))}
         </nav>
@@ -573,11 +571,11 @@ export default function App() {
               {ws.connected ? "Đã kết nối" : "Chưa kết nối"}
             </span>
           </div>
-          <h3>Telegram, gọn hơn.</h3>
+          <h3>Giữ kết nối, giữ cảm hứng.</h3>
           <p>
             Biến hội thoại thành công việc.
             <br />
-            Để bạn tập trung vào điều cần làm.
+            Thêm thời gian cho điều bạn yêu.
           </p>
           <button
             onClick={() => (ws.connected ? void sync() : setModal("connect"))}
@@ -649,8 +647,8 @@ export default function App() {
             <span className="avatar avatar-top">{initials(ws.user)}</span>
           </div>
         </header>
-        <main>
-          <div className={`connection-strip connection-${connection}`} role="status" aria-live="polite">
+        <main id="workspace-main" tabIndex={-1}>
+          {(page !== "introduce" || connection !== "connected") && <div className={`connection-strip connection-${connection}`} role="status" aria-live="polite">
             <div>
               <strong>{connection === "connected" ? "Đã kết nối với Mac" : connection === "connecting" ? "Đang kết nối với Mac…" : connection === "forbidden" ? "Không có quyền truy cập" : "Mất kết nối · Chỉ đọc"}</strong>
               <span>{connection === "forbidden"
@@ -660,36 +658,47 @@ export default function App() {
                   : "Chưa tải dữ liệu. Kiểm tra Tailscale và backend trên Mac."}</span>
             </div>
             {!serverAvailable && <button className="button secondary" onClick={() => void refresh()}>Thử kết nối lại</button>}
-          </div>
+          </div>}
           {(ws.sync.running || ws.sync.error) && (
             <div className={`system-banner ${ws.sync.error ? "warning-banner" : ""}`} role="status">
               {ws.sync.running ? <ArrowsClockwise className="spin" size={17} /> : <WarningCircle size={17} />}
               {ws.sync.running ? ws.sync.progress : ws.sync.error}
             </div>
           )}
-          {lastUpdatedAt && <>
-          <div className="page-heading">
+          {(lastUpdatedAt || page === "introduce") && <>
+          <AnimatePresence mode="wait" initial={false} key={ws.accountRevision}>
+          <motion.div
+            key={page}
+            className="workspace-page"
+            initial={{ opacity: 0, y: reducedMotion ? 0 : 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: reducedMotion ? 0 : -8 }}
+            transition={{ duration: reducedMotion ? 0.12 : 0.28, ease: [0.16, 1, 0.3, 1] }}
+          >
+          <Suspense fallback={<div className="page-loading" role="status"><p>Đang mở không gian của bạn…</p><div className="library-skeleton" /><div className="library-skeleton" /></div>}>
+          {page !== "introduce" && <div className="page-heading">
             <div>
               <span className="eyebrow">
                 {page === "overview" ? longDate(day) : "KHÔNG GIAN CỦA BẠN"}
               </span>
               <h1>
                 {page === "overview"
-                  ? `Chào ${name}, một ngày rõ việc.`
+                  ? `Chào ${name}, hôm nay thật xinh.`
                   : {
                       tasks: "Công việc của bạn",
                       inbox: "Không bỏ lỡ một lời nhắn.",
                       groups: "Chọn nhóm đáng để quan tâm.",
-                      library: "Tìm lại tài liệu, đúng người, đúng việc.",
+                      library: "Tìm lại đúng file. Giữ trọn ngữ cảnh.",
                       calendar: "Dành chỗ cho việc quan trọng.",
                       reports: "Nhìn lại, để đi tiếp.",
                       toolkit: "Một trợ thủ cho mọi bước BA.",
                       settings: "Theo nhịp làm việc của bạn.",
+                      introduce: "Khí chất BA",
                     }[page]}
               </h1>
               <p>
                 {page === "overview"
-                  ? "Bớt tìm trong hội thoại. Thêm thời gian cho công việc có ý nghĩa."
+                  ? "Mọi điều bạn cần, trong một không gian mang khí chất của riêng mình."
                   : {
                       tasks:
                         "Tất cả đầu việc, từ Telegram đến những điều bạn tự ghi nhớ.",
@@ -698,7 +707,7 @@ export default function App() {
                       groups:
                         "Theo dõi nhóm đang làm việc, bỏ qua các dự án đã bàn giao.",
                       library:
-                        "File, thư mục và liên kết bạn đã trao đổi, cùng tin nhắn gốc.",
+                        "Tên tài liệu, người trao đổi và tin nhắn gốc. Lọc những gì bạn gửi hoặc nhận.",
                       calendar:
                         "Cuộc hẹn, thời gian tập trung và nhịp nhắc việc mỗi ngày.",
                       reports: "Thông tin vừa đủ. Việc cần làm luôn rõ ràng.",
@@ -706,6 +715,7 @@ export default function App() {
                         "Những mẫu thực dụng dành cho một Business Analyst ở IT.",
                       settings:
                         "Kết nối Telegram và thiết lập cách BA Desk nhắc bạn.",
+                      introduce: "Xinh gái, giỏi giang, sang chảnh.",
                     }[page]}
               </p>
             </div>
@@ -756,11 +766,11 @@ export default function App() {
                 </button>
               ) : null}
             </div>
-          </div>
-          {ws.ai.running && page !== "reports" && page !== "inbox" && (
+          </div>}
+          {ws.ai.running && page !== "reports" && page !== "inbox" && page !== "introduce" && (
             <AIStatus ai={ws.ai} onAnalyze={() => analyze()} />
           )}
-          {isDemo && (
+          {isDemo && page !== "introduce" && (
             <div className="demo-banner">
               <span className="demo-badge">TRẢI NGHIỆM</span>
               <span>
@@ -774,6 +784,7 @@ export default function App() {
             </div>
           )}
 
+          {page === "introduce" && <IntroducePage onOpenWorkspace={() => navigate("overview")} />}
           {page === "overview" && (
             <OverviewPage
               ws={ws}
@@ -967,10 +978,13 @@ export default function App() {
                   : "Dữ liệu cục bộ · Không đồng bộ trực tiếp"}
             </span>
             <span>
-              Được thiết kế để bạn nhẹ đầu hơn.
+              Xinh gái, mỗi ngày. Khí chất, mãi mãi.
               <span className="footer-brand">ba desk</span>
             </span>
           </footer>
+          </Suspense>
+          </motion.div>
+          </AnimatePresence>
           </>}
         </main>
       </div>

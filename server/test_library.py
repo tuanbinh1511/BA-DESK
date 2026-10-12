@@ -6,7 +6,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
-from telethon.tl.types import User
+from telethon.tl.types import DocumentAttributeCustomEmoji, DocumentAttributeSticker, InputStickerSetEmpty, User
 from server import store
 from server.ai_service import AIService
 from server.analyzer import TZ, analyze, parse_export
@@ -93,12 +93,50 @@ class LibraryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual({item['name'] for item in items}, {'UAT_Checklist.xlsx', 'Payment Specs'})
         self.assertEqual(next(item for item in items if item['name'] == 'Payment Specs')['kind'], 'folder')
 
+    def test_library_excludes_media_but_keeps_office_files_and_original_messages(self):
+        for name, mime, media in [('sticker.webp', 'image/webp', None), ('icon.svg', 'image/svg+xml', None), ('animation.tgs', 'application/x-tgsticker', 'sticker'), ('fake.docx', 'application/octet-stream', 'emoji'), ('photo.docx', 'image/png', None)]:
+            source = message(text='Gửi nhãn dán', attachment={'name': name, 'mimeType': mime, 'mediaType': media})
+            self.assertEqual(references(source), [])
+            store.save_messages_and_tasks([source], [])
+            self.assertEqual(store.resources()['total'], 0)
+            self.assertEqual(store.get('message', source['id'])['text'], source['text'])
+        for name in ['Budget.xlsm', 'Plan.pptx', 'Brief.docx', 'Notes.odt', 'Checklist.tsv']:
+            self.assertEqual(references(message(attachment={'name': name}))[0]['name'], name)
+        self.assertEqual(references(message(text='"icon.svg" /stickers/a.webp https://example.test/emoji.png')), [])
+
+    def test_old_media_index_is_rebuilt_without_losing_exchange_context(self):
+        source = message(text='Mình gửi bản cập nhật trước họp', outgoing=True, attachment={'name': 'Plan.pptx'})
+        store.put('message', source['id'], source)
+        store.put('message', '1:2', message('1:2', attachment={'name': 'sticker.webp'}))
+        store.put('resource', 'legacy-sticker', {'sourceId': '1:2', 'name': 'sticker.webp'})
+        store.put('meta', 'libraryVersion', '2')
+        result = store.resources(direction='sent')
+        self.assertEqual(result['total'], 1)
+        self.assertEqual(result['items'][0]['name'], 'Plan.pptx')
+        self.assertEqual(result['items'][0]['text'], source['text'])
+        self.assertEqual(result['items'][0]['chat'], source['chat'])
+        self.assertEqual(len(store.get_all('message')), 2)
+
+    def test_export_sticker_metadata_is_preserved_but_not_indexed(self):
+        payload = {'id': 1, 'type': 'personal_chat', 'name': 'An', 'messages': [{'id': 9, 'type': 'message', 'from_id': 'user456', 'date': DAY + 'T09:00:00', 'file': 'files/fake.docx', 'media_type': 'sticker', 'text': ''}]}
+        messages, _ = parse_export(payload, '123', '')
+        self.assertEqual(messages[0]['attachment']['mediaType'], 'sticker')
+        self.assertEqual(references(messages[0]), [])
+
     async def test_live_metadata_keeps_filename_and_caption(self):
         original = SimpleNamespace(id=9, message='Review tài liệu giúp mình', media=True, entities=[], date=datetime(2026, 10, 11, 9, tzinfo=TZ), out=False, reply_to_msg_id=None, file=SimpleNamespace(name='UAT Checklist.xlsx', mime_type='application/vnd.ms-excel', size=3000), get_sender=AsyncMock(return_value=User(id=456, first_name='An')))
         dialog = SimpleNamespace(id=456, name='An', is_user=True, is_group=False, entity=SimpleNamespace(username='an'))
         record = await TelegramService().normalize_message(dialog, SimpleNamespace(id=123, username='self'), original)
         self.assertEqual(record['attachment']['name'], 'UAT Checklist.xlsx')
         self.assertEqual(record['text'], 'Review tài liệu giúp mình')
+
+    async def test_live_sticker_and_custom_emoji_are_not_documents_even_when_renamed(self):
+        dialog = SimpleNamespace(id=456, name='An', is_user=True, is_group=False, entity=SimpleNamespace(username='an'))
+        for attribute, media_type in [(DocumentAttributeSticker('', InputStickerSetEmpty()), 'sticker'), (DocumentAttributeCustomEmoji('', InputStickerSetEmpty()), 'emoji')]:
+            original = SimpleNamespace(id=9, message='', media=True, entities=[], date=datetime(2026, 10, 11, 9, tzinfo=TZ), out=False, reply_to_msg_id=None, file=SimpleNamespace(name='fake.docx', mime_type='application/octet-stream', size=3000), document=SimpleNamespace(attributes=[attribute]), get_sender=AsyncMock(return_value=User(id=456, first_name='An')))
+            record = await TelegramService().normalize_message(dialog, SimpleNamespace(id=123, username='self'), original)
+            self.assertEqual(record['attachment']['mediaType'], media_type)
+            self.assertEqual(references(record), [])
 
     async def test_daily_ai_never_sends_old_or_next_day_messages_or_fetches_history(self):
         old = message('1:0', text='Bạn kiểm tra việc cũ?', date='2026-10-10T10:00:00+07:00')

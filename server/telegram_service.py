@@ -4,7 +4,7 @@ import os
 import re
 from datetime import datetime, timedelta
 from telethon import TelegramClient, errors, utils
-from telethon.tl.types import MessageEntityMentionName
+from telethon.tl.types import DocumentAttributeCustomEmoji, DocumentAttributeSticker, MessageEntityMentionName
 from . import store
 from .analyzer import TZ, analyze
 
@@ -162,6 +162,11 @@ class TelegramService:
         file = getattr(message, 'file', None)
         if file and file.name:
             record['attachment'] = {'name': file.name, 'mimeType': file.mime_type, 'size': file.size}
+            attributes = getattr(getattr(message, 'document', None), 'attributes', [])
+            if any(isinstance(attribute, DocumentAttributeSticker) for attribute in attributes):
+                record['attachment']['mediaType'] = 'sticker'
+            elif any(isinstance(attribute, DocumentAttributeCustomEmoji) for attribute in attributes):
+                record['attachment']['mediaType'] = 'emoji'
         return record
 
     async def sync_day(self, day):

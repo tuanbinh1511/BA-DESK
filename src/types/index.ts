@@ -1,5 +1,6 @@
 export type Page =
   | "overview"
+  | "introduce"
   | "tasks"
   | "inbox"
   | "calendar"
@@ -32,6 +33,7 @@ export interface Message {
     path?: string;
     mimeType?: string | null;
     size?: number | null;
+    mediaType?: "sticker" | "emoji";
   };
 }
 export interface DocumentReference {

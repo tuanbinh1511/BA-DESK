@@ -1,4 +1,5 @@
 import os
+import json
 import socket
 import subprocess
 import sys
@@ -22,6 +23,8 @@ class RemoteAccessTests(unittest.TestCase):
             'BA_DESK_AI_DISABLED': '1',
             'BA_DESK_REMOTE_MODE': 'tailscale',
             'BA_DESK_TAILSCALE_LOGIN': 'owner@example.invalid',
+            'BA_DESK_TAILSCALE_ADMINS': 'admin@example.invalid',
+            'BA_DESK_TAILSCALE_VIEWERS': 'viewer@example.invalid',
             'BA_DESK_ALLOWED_HOSTS': 'desk.test.ts.net',
             'BA_DESK_ALLOWED_ORIGINS': 'https://frontend.example,http://127.0.0.1:5173',
         }
@@ -47,14 +50,42 @@ class RemoteAccessTests(unittest.TestCase):
         cls.directory.cleanup()
 
     @classmethod
-    def request(cls, method='GET', headers=None):
-        request = Request(cls.base + '/api/state', method=method, headers=headers or {})
+    def request(cls, method='GET', headers=None, body=None, path='/api/state'):
+        request = Request(cls.base + path, method=method, headers=headers or {}, data=json.dumps(body).encode() if body is not None else None)
         try:
             with urlopen(request, timeout=2) as response:
                 return response.status, response.headers
         except HTTPError as error:
             with error:
                 return error.code, error.headers
+
+    def test_viewer_can_read_and_cannot_mutate(self):
+        headers = {'Host': 'desk.test.ts.net', 'Origin': 'https://frontend.example', 'Tailscale-User-Login': 'viewer@example.invalid', 'Content-Type': 'application/json'}
+        for path in ('/api/state', '/api/resources'):
+            self.assertEqual(self.request(headers=headers, path=path)[0], 200)
+        for method, path in (('POST', '/api/tasks'), ('PATCH', '/api/tasks/missing'), ('DELETE', '/api/tasks/missing'),
+                             ('PUT', '/api/settings'), ('POST', '/api/telegram/connect'), ('POST', '/api/telegram/disconnect'),
+                             ('DELETE', '/api/telegram/bot'), ('POST', '/api/sync'), ('POST', '/api/ai/analyze'),
+                             ('POST', '/api/reports'), ('POST', '/api/import'), ('POST', '/api/workspace/start')):
+            status, response = self.request(method, headers, {}, path)
+            self.assertEqual(status, 403, path)
+            self.assertEqual(response['Access-Control-Allow-Origin'], 'https://frontend.example')
+        self.assertEqual(self.request(headers=headers | {'Origin': 'https://evil.example'})[0], 403)
+
+    def test_owner_can_still_mutate(self):
+        headers = {'Host': 'desk.test.ts.net', 'Origin': 'https://frontend.example', 'Tailscale-User-Login': 'owner@example.invalid', 'Content-Type': 'application/json'}
+        self.assertEqual(self.request('POST', headers, {'title': 'Owner task'}, '/api/tasks')[0], 200)
+
+    def test_admin_has_full_access_with_existing_guards(self):
+        headers = {'Host': 'desk.test.ts.net', 'Origin': 'https://frontend.example', 'Tailscale-User-Login': 'admin@example.invalid', 'Content-Type': 'application/json'}
+        self.assertEqual(self.request(headers=headers)[0], 200)
+        self.assertEqual(self.request('POST', headers, {'title': 'Admin task'}, '/api/tasks')[0], 200)
+        self.assertEqual(self.request('PUT', headers, {'morning': '08:30', 'evening': '17:00', 'enabled': True}, '/api/settings')[0], 200)
+        self.assertEqual(self.request('PATCH', headers, {}, '/api/tasks/missing')[0], 404)
+        self.assertEqual(self.request('DELETE', headers, path='/api/events/missing')[0], 200)
+        self.assertEqual(self.request(headers=headers | {'Origin': 'https://evil.example'})[0], 403)
+        self.assertEqual(self.request(headers=headers | {'Host': 'untrusted.example'})[0], 400)
+        self.assertEqual(self.request('POST', headers | {'X-Account-Revision': '999'}, {}, '/api/tasks')[0], 409)
 
     def test_identity_is_required_even_without_origin(self):
         self.assertEqual(self.request()[0], 403)

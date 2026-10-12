@@ -7,7 +7,8 @@ from pathlib import PurePosixPath
 from urllib.parse import unquote, urlparse
 
 URL = re.compile(r'(?:https?://|www\.)[^\s<>"\u201c\u201d]+', re.I)
-EXTENSIONS = r'(?:pdf|docx?|xlsx?|pptx?|csv|txt|md|json|xml|yaml|yml|zip|rar|7z|fig|drawio|bpmn|png|jpe?g|svg)'
+EXTENSIONS = r'(?:pdf|docx?|docm|dotx?|dotm|xlsx?|xlsm|xlsb|xltx?|xltm|pptx?|pptm|ppsx?|ppsm|potx?|potm|odt|ods|odp|rtf|csv|tsv|txt|md|json|xml|yaml|yml|zip|rar|7z|fig|drawio|bpmn)'
+MEDIA_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp', '.avif', '.tgs', '.webm', '.mp4', '.mov', '.mp3', '.ogg', '.wav'}
 FILE = re.compile(r'(?<![\w./\\])([\w][\w.()\-]*\.' + EXTENSIONS + r')\b', re.I)
 QUOTED = re.compile(r'["\u201c`]([^"\u201d`\n]+)["\u201d`]')
 PATH = re.compile(r'(?<!\w)(?:[A-Za-z]:\\|\\\\|/|\./|\.\./)[^\s<>"\u201c\u201d`]+')
@@ -28,11 +29,21 @@ def safe_url(value):
         return None
 
 
+def is_document(attachment):
+    name = attachment.get('name') or ''
+    mime = (attachment.get('mimeType') or '').lower()
+    return bool(re.search(r'\.' + EXTENSIONS + r'$', name, re.I)) and not (
+        attachment.get('mediaType') in ('sticker', 'emoji', 'icon')
+        or mime.startswith(('image/', 'video/', 'audio/'))
+        or 'sticker' in mime
+    )
+
+
 def references(message):
     text = message['text']
     found = {}
     attachment = message.get('attachment')
-    if attachment and attachment.get('name'):
+    if attachment and is_document(attachment):
         found[attachment['name']] = {'kind': 'file', 'name': attachment['name'], 'value': attachment.get('path') or attachment['name'], 'url': None, 'mimeType': attachment.get('mimeType'), 'size': attachment.get('size'), 'origin': 'attachment'}
     links = list(message.get('links') or []) + [match.group().rstrip('.,;!?') for match in URL.finditer(text)]
     for value in links:
@@ -44,6 +55,8 @@ def references(message):
             continue
         parsed = urlparse(url)
         name = unquote(PurePosixPath(parsed.path).name) or parsed.hostname
+        if PurePosixPath(name).suffix.lower() in MEDIA_EXTENSIONS:
+            continue
         found[url] = {'kind': 'folder' if '/folders/' in parsed.path else 'link', 'name': name, 'value': url, 'url': url, 'origin': 'link'}
     without_urls = URL.sub('', text)
     for match in QUOTED.finditer(without_urls):
@@ -56,6 +69,8 @@ def references(message):
     for value in paths:
         value = value.rstrip('.,;!?')
         is_file = bool(re.search(r'\.' + EXTENSIONS + r'$', value, re.I))
+        if PurePosixPath(value).suffix.lower() in MEDIA_EXTENSIONS:
+            continue
         if not is_file and (not re.match(r'^(?:[A-Za-z]:\\|\\\\|/|\./|\.\./)', value) or not re.search(r'[a-zA-Z_]', value)):
             continue
         found.setdefault(value, {'kind': 'file' if is_file else 'folder', 'name': value.replace('\\', '/').rstrip('/').rsplit('/', 1)[-1], 'value': value, 'url': None, 'origin': 'mentioned'})
@@ -81,11 +96,11 @@ def index_message(connection, message):
 
 def search_resources(connection, query='', kind='', chat='', sender='', direction='', start='', end='', offset=0, limit=40):
     indexed = connection.execute("SELECT data FROM records WHERE kind = 'meta' AND id = 'libraryVersion'").fetchone()
-    if not indexed or indexed[0] != '2':
+    if not indexed or indexed[0] != '3':
         connection.execute("DELETE FROM records WHERE kind = 'resource'")
         for row in connection.execute("SELECT data FROM records WHERE kind = 'message'").fetchall():
             index_message(connection, json.loads(row[0]))
-        connection.execute('INSERT OR REPLACE INTO records VALUES (?, ?, ?)', ('meta', 'libraryVersion', '2'))
+        connection.execute('INSERT OR REPLACE INTO records VALUES (?, ?, ?)', ('meta', 'libraryVersion', '3'))
     clauses, values = ["kind = 'resource'"], []
     for term in folded(query).split():
         clauses.append("json_extract(data, '$.search') LIKE ? ESCAPE '\\'")

@@ -1,20 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  ArrowUpRight,
-  Copy,
-  FileText,
-  Folder,
-  Link,
-  MagnifyingGlass,
-  X,
-} from "@phosphor-icons/react";
 import { api } from "../services/api";
 import type { DocumentReference, LibraryResult } from "../types";
 import { clock, shortDate, today, dateOf } from "../utils/dates";
-import { Empty } from "../components/WorkspaceUI";
+import { download } from "../utils/files";
 
 const kindLabels = { file: "Tài liệu", folder: "Thư mục", link: "Liên kết" };
-const kindIcons = { file: FileText, folder: Folder, link: Link };
 const initialFilters = {
   query: "",
   kind: "",
@@ -45,6 +35,27 @@ const demoItem: DocumentReference = {
   text: "Mình gửi BRD_Payment_v2.docx. Bạn review giúp phần hoàn tiền trước buổi refinement nhé.",
 };
 
+const demoItems: DocumentReference[] = [
+  demoItem,
+  { ...demoItem, id: "demo-budget", sourceId: "demo:2", name: "Budget_Q4.xlsx", value: "Budget_Q4.xlsx", date: `${today()}T10:30:00+07:00`, mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", text: "Mình gửi bảng ngân sách đã chốt. Bạn đối chiếu cột chi phí triển khai giúp mình trước 15h nhé." },
+  { ...demoItem, id: "demo-slides", sourceId: "demo:3", name: "Refinement_Payment.pptx", value: "Refinement_Payment.pptx", date: `${today()}T11:05:00+07:00`, sender: "Bạn", senderId: "demo-self", outgoing: true, mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation", text: "Mình gửi slides cho buổi refinement. Minh Anh xem giúp phần tiêu chí nghiệm thu trước cuộc họp nhé." },
+];
+
+function noteFor(item: DocumentReference) {
+  return [
+    `Tài liệu: ${item.name}`,
+    `Tên / đường dẫn / liên kết: ${item.value}`,
+    `Trao đổi: ${item.outgoing ? "Bạn gửi" : "Bạn nhận"}`,
+    `Người gửi: ${item.sender}`,
+    `Hội thoại / người trao đổi: ${item.chat}`,
+    `Thời gian: ${item.date}`,
+    `Mã hội thoại: ${item.chatId}`,
+    `Mã tin gốc: ${item.sourceId}`,
+    `Telegram: ${item.sourceUrl || item.chatUrl || "Dùng tên hội thoại, thời gian và mã tin để tra cứu trên Telegram."}`,
+    "", "Nội dung tin nhắn gốc:", item.text,
+  ].join("\n");
+}
+
 export function LibraryPage({
   accountRevision,
   isDemo,
@@ -63,6 +74,14 @@ export function LibraryPage({
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<DocumentReference | null>(null);
   const preview = useRef<HTMLElement>(null);
+  const [exporting, setExporting] = useState(false);
+  const currentAccount = useRef(accountRevision);
+  currentAccount.current = accountRevision;
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   function change(field: keyof typeof initialFilters, value: string) {
     setFilters((previous) => ({ ...previous, [field]: value }));
     setOffset(0);
@@ -72,27 +91,23 @@ export function LibraryPage({
     setLoading(true);
     setError("");
     const timer = window.setTimeout(() => {
-      const visibleDemo =
-        (!filters.kind || filters.kind === demoItem.kind) &&
-        (!filters.chat || filters.chat === demoItem.chatId) &&
-        (!filters.sender || filters.sender === demoItem.senderId) &&
-        filters.direction !== "sent" &&
-        (!filters.start || dateOf(demoItem.date) >= filters.start) &&
-        (!filters.end || dateOf(demoItem.date) <= filters.end) &&
-        filters.query
-          .toLowerCase()
-          .split(/\s+/)
-          .every((word) =>
-            `${demoItem.name} ${demoItem.sender} ${demoItem.chat} ${demoItem.text}`
-              .toLowerCase()
-              .includes(word),
-          );
+      const visibleDemo = demoItems.filter((item) =>
+        (!filters.kind || filters.kind === item.kind) &&
+        (!filters.chat || filters.chat === item.chatId) &&
+        (!filters.sender || filters.sender === item.senderId) &&
+        (!filters.direction || item.outgoing === (filters.direction === "sent")) &&
+        (!filters.start || dateOf(item.date) >= filters.start) &&
+        (!filters.end || dateOf(item.date) <= filters.end) &&
+        filters.query.toLowerCase().split(/\s+/).every((word) =>
+          `${item.name} ${item.sender} ${item.chat} ${item.text}`.toLowerCase().includes(word),
+        ),
+      );
       const request = isDemo
         ? Promise.resolve({
-            items: visibleDemo ? [demoItem] : [],
-            total: Number(visibleDemo),
+            items: visibleDemo,
+            total: visibleDemo.length,
             chats: [{ id: demoItem.chatId, name: demoItem.chat }],
-            senders: [{ id: "demo-person", name: demoItem.sender }],
+            senders: [{ id: "demo-person", name: demoItem.sender }, { id: "demo-self", name: "Bạn" }],
             accountRevision,
           })
         : api<LibraryResult>(
@@ -144,12 +159,53 @@ export function LibraryPage({
       );
     }
   }
-  const SelectedIcon = selected ? kindIcons[selected.kind] : FileText;
+  async function exportNotes() {
+    if (exporting || !result) return;
+    setExporting(true);
+    const revision = accountRevision;
+    const exportFilters = { ...filters };
+    const items: DocumentReference[] = [];
+    try {
+      if (isDemo) items.push(...result.items);
+      else {
+        let total = result.total;
+        for (let nextOffset = 0; nextOffset < total; nextOffset += 100) {
+          const page = await api<LibraryResult>(`/resources?${new URLSearchParams({ ...exportFilters, offset: String(nextOffset), limit: "100" })}`);
+          if (!mounted.current || currentAccount.current !== revision || page.accountRevision !== revision) return;
+          if (page.total !== total || !page.items.length) throw new Error("Kho tài liệu vừa thay đổi. Thử xuất lại để giữ đủ ngữ cảnh.");
+          items.push(...page.items);
+          total = page.total;
+        }
+      }
+      if (!mounted.current || currentAccount.current !== revision) return;
+      const filterSummary = [
+        exportFilters.direction === "sent" ? "Tôi gửi" : exportFilters.direction === "received" ? "Tôi nhận" : "Tất cả trao đổi",
+        exportFilters.kind ? kindLabels[exportFilters.kind as keyof typeof kindLabels] : "Mọi loại tài liệu",
+        exportFilters.query && `Từ khóa: ${exportFilters.query}`,
+        exportFilters.chat && `Hội thoại: ${result.chats.find((chat) => chat.id === exportFilters.chat)?.name ?? exportFilters.chat}`,
+        exportFilters.sender && `Người gửi: ${result.senders.find((sender) => sender.id === exportFilters.sender)?.name ?? exportFilters.sender}`,
+        exportFilters.start && `Từ ngày ${exportFilters.start}`,
+        exportFilters.end && `Đến ngày ${exportFilters.end}`,
+      ].filter(Boolean).join(" · ");
+      const body = ["BA Desk — Ghi chú tài liệu & liên kết", `Xuất lúc: ${new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}`, `Số kết quả: ${items.length}`, `Bộ lọc: ${filterSummary}`, "", items.map(noteFor).join("\n\n---\n\n")].join("\n");
+      download(body, `ba-desk-tai-lieu-${today()}.md`);
+      notify(`Đã lưu ghi chú cho ${items.length} tài liệu & liên kết, kèm toàn bộ tin nhắn gốc.`);
+    } catch (failure) {
+      if (mounted.current) notify(failure instanceof Error ? failure.message : "Không thể xuất ghi chú. Thử lại.");
+    } finally {
+      if (mounted.current) setExporting(false);
+    }
+  }
   return (
     <>
       <div className="library-toolbar">
+        <div className="library-direction" aria-label="Lọc trao đổi tài liệu">
+          {[["", "Tất cả trao đổi"], ["sent", "Tôi gửi"], ["received", "Tôi nhận"]].map(([value, label]) => (
+            <button key={value} aria-pressed={filters.direction === value} onClick={() => change("direction", value)}>{label}</button>
+          ))}
+        </div>
+        <div className="library-search-row">
         <label className="library-search">
-          <MagnifyingGlass size={21} />
           <input
             aria-label="Tìm tài liệu và liên kết"
             placeholder="Tên file, người gửi, dự án, nội dung, đường dẫn…"
@@ -161,10 +217,14 @@ export function LibraryPage({
               aria-label="Xóa tìm kiếm"
               onClick={() => change("query", "")}
             >
-              <X size={17} />
+              Xóa
             </button>
           )}
         </label>
+        <button className="button secondary" onClick={() => void exportNotes()} disabled={exporting || loading || !!error || !result?.total}>
+          {exporting ? "Đang xuất ghi chú…" : "Xuất toàn bộ ghi chú"}
+        </button>
+        </div>
         <div className="library-types" aria-label="Loại tài liệu">
           {[
             ["", "Tất cả"],
@@ -220,18 +280,6 @@ export function LibraryPage({
               </select>
             </label>
             <label>
-              Trao đổi
-              <select
-                aria-label="Lọc tin đã gửi hoặc nhận"
-                value={filters.direction}
-                onChange={(event) => change("direction", event.target.value)}
-              >
-                <option value="">Đã gửi & đã nhận</option>
-                <option value="received">Bạn nhận</option>
-                <option value="sent">Bạn gửi</option>
-              </select>
-            </label>
-            <label>
               Từ ngày
               <input
                 aria-label="Tài liệu từ ngày"
@@ -279,9 +327,9 @@ export function LibraryPage({
         aria-busy={loading}
       >
         <section className="library-results" aria-label="Kết quả tra cứu">
+          {loading && !result && <div aria-label="Đang tải tài liệu">{[0, 1, 2].map((item) => <div className="library-skeleton" key={item} />)}</div>}
           {result?.items.length
             ? result.items.map((item) => {
-                const Icon = kindIcons[item.kind];
                 return (
                   <button
                     className={`library-item ${selected?.id === item.id ? "selected" : ""}`}
@@ -289,15 +337,10 @@ export function LibraryPage({
                     aria-pressed={selected?.id === item.id}
                     onClick={() => setSelected(item)}
                   >
-                    <span
-                      className={`library-item-icon reference-${item.kind}`}
-                    >
-                      <Icon size={24} weight="duotone" />
-                    </span>
                     <span className="library-item-copy">
                       <strong>{item.name}</strong>
                       <span>
-                        {item.outgoing ? "Bạn gửi" : item.sender} · {item.chat}
+                        {item.outgoing ? "Tôi gửi" : `Tôi nhận từ ${item.sender}`} · {item.chat}
                       </span>
                       <small>
                         {item.origin === "mentioned"
@@ -306,16 +349,14 @@ export function LibraryPage({
                         · {shortDate(item.date)} · {clock(item.date)}
                       </small>
                     </span>
-                    <ArrowUpRight size={17} />
                   </button>
                 );
               })
             : !loading && (
-                <Empty
-                  icon={Folder}
-                  title="Chưa tìm thấy tài liệu"
-                  text="Thử tên file, người trao đổi hoặc một từ trong tin nhắn. Tài liệu từ các nhóm bỏ qua vẫn có thể tra cứu."
-                />
+                <div className="library-empty">
+                  <h2>Chưa tìm thấy tài liệu</h2>
+                  <p>Thử tên file, người trao đổi hoặc một từ trong tin nhắn. Tài liệu từ nhóm bỏ qua vẫn có thể tra cứu.</p>
+                </div>
               )}
           {result && result.total > 40 && (
             <div className="library-pagination">
@@ -348,15 +389,12 @@ export function LibraryPage({
           {selected ? (
             <div className="document-sheet" key={selected.id}>
               <div className="document-sheet-head">
-                <span className={`document-emblem reference-${selected.kind}`}>
-                  <SelectedIcon size={35} weight="duotone" />
-                </span>
                 <button
-                  className="icon-button"
+                  className="text-button"
                   aria-label="Đóng chi tiết tài liệu"
                   onClick={() => setSelected(null)}
                 >
-                  <X size={19} />
+                  Đóng
                 </button>
               </div>
               <h2>{selected.name}</h2>
@@ -379,6 +417,7 @@ export function LibraryPage({
                 )}
               </div>
               <dl>
+                <div><dt>Trao đổi</dt><dd>{selected.outgoing ? "Tôi gửi" : "Tôi nhận"}</dd></div>
                 <div>
                   <dt>Người gửi</dt>
                   <dd>
@@ -388,7 +427,7 @@ export function LibraryPage({
                   </dd>
                 </div>
                 <div>
-                  <dt>Hội thoại</dt>
+                  <dt>Trao đổi với / hội thoại</dt>
                   <dd>{selected.chat}</dd>
                 </div>
                 <div>
@@ -416,7 +455,6 @@ export function LibraryPage({
                     rel="noreferrer"
                   >
                     Mở liên kết
-                    <ArrowUpRight size={17} />
                   </a>
                 )}
                 {selected.sourceUrl?.startsWith("https://t.me/") && (
@@ -427,7 +465,6 @@ export function LibraryPage({
                     rel="noreferrer"
                   >
                     Mở tin trên Telegram
-                    <ArrowUpRight size={16} />
                   </a>
                 )}
                 {selected.chatUrl?.startsWith("https://t.me/") && (
@@ -438,14 +475,12 @@ export function LibraryPage({
                     rel="noreferrer"
                   >
                     Mở hội thoại Telegram
-                    <ArrowUpRight size={16} />
                   </a>
                 )}
                 <button
                   className="button secondary"
                   onClick={() => void copy(selected.value)}
                 >
-                  <Copy size={16} />
                   Sao chép{" "}
                   {selected.kind === "link" ? "link" : "đường dẫn / tên"}
                 </button>
@@ -453,7 +488,7 @@ export function LibraryPage({
                   className="button quiet"
                   onClick={() =>
                     void copy(
-                      `${selected.name}\n${selected.value}\n${selected.sender} · ${selected.chat} · ${selected.date}\n${selected.text}`,
+                      noteFor(selected),
                     )
                   }
                 >
@@ -469,20 +504,14 @@ export function LibraryPage({
             </div>
           ) : (
             <div className="document-idle">
-              <div className="document-stack" aria-hidden="true">
-                <span />
-                <span />
-                <span>
-                  <FileText size={43} weight="duotone" />
-                </span>
-              </div>
+              <p className="document-note">Tên file. Người trao đổi. Tin nhắn gốc.</p>
               <h2>Mỗi tài liệu, đúng ngữ cảnh.</h2>
               <p>
                 Chọn một kết quả để biết đã trao đổi với ai, khi nào và trong
                 nội dung gì.
               </p>
               <small>
-                Lưu tên, link và ngữ cảnh từ tin đã đồng bộ. Mở file gốc qua
+                Lưu tên tài liệu và toàn bộ nội dung tin đã đồng bộ. Mở file gốc qua
                 Telegram.
               </small>
             </div>

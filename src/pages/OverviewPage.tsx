@@ -7,9 +7,7 @@ import {
   CheckCircle,
   CheckSquare,
   FunnelSimple,
-  Moon,
   Plus,
-  Sparkle,
   Sun,
 } from "@phosphor-icons/react";
 import type { CalendarEvent, Page, Task, Workspace, TaskPatch } from "../types";
@@ -17,6 +15,7 @@ import { clock, initials, longDate } from "../utils/dates";
 import { replyLabels } from "../utils/labels";
 import { Empty, SectionHead, Agenda } from "../components/WorkspaceUI";
 import { TaskRow } from "../components/TaskRow";
+import { BrandHero } from "../components/BrandHero";
 export function OverviewPage({
   ws,
   tasks,
@@ -58,84 +57,17 @@ export function OverviewPage({
   busy: boolean;
   isDemo: boolean;
 }) {
-  const now = clock(new Date().toISOString());
-  const nextMorning = now < ws.settings.morning || now >= ws.settings.evening;
   return (
     <>
-      <section className="daily-brief">
-        <div className="brief-copy">
-          <span className="brief-label">
-            <Sparkle size={16} weight="fill" />
-            BẢN TIN CỦA BẠN
-            <span className="brief-live">
-              {isDemo ? "Bản mẫu" : "Tổng hợp công việc"}
-            </span>
-          </span>
-          <h2>Giữ mọi thứ trong tầm tay.</h2>
-          <p>
-            {active.length ? (
-              <>
-                Bạn có <strong>{high} việc ưu tiên cao</strong> và{" "}
-                <strong>{waiting.length} hội thoại cần phản hồi</strong>
-                .<br />
-                Bắt đầu từ việc quan trọng, phần còn lại đã có BA Desk ghi nhớ.
-              </>
-            ) : (
-              <>
-                Không có việc đang chờ trong ngày bạn chọn.
-                <br />
-                Một khoảng trống đẹp để tập trung vào điều tiếp theo.
-              </>
-            )}
-          </p>
-          <button onClick={() => void makeReport()} disabled={busy}>
-            Xem bản tóm tắt
-            <ArrowRight size={16} />
-          </button>
-        </div>
-        <div className="brief-orbit" aria-hidden="true">
-          <div className="orbit-ring ring-one" />
-          <div className="orbit-ring ring-two" />
-          <span className="orbit-dot dot-one" />
-          <span className="orbit-dot dot-two" />
-          <div className="orbit-center">
-            <CheckSquare size={32} weight="duotone" />
-            <span>
-              Rõ việc.
-              <br />
-              <strong>Nhẹ đầu.</strong>
-            </span>
-          </div>
-        </div>
-        <div className="brief-next">
-          <span>
-            {nextMorning ? <Sun size={14} /> : <Moon size={14} />}
-            NHỊP NHẮC TIẾP THEO
-          </span>
-          <strong>
-            {nextMorning ? ws.settings.morning : ws.settings.evening}
-          </strong>
-          <p>
-            {nextMorning
-              ? now >= ws.settings.evening
-                ? "Bản tin sáng mai"
-                : "Bản tin buổi sáng"
-              : "Rà soát cuối ngày"}
-          </p>
-          <small>
-            <span className="mini-dot" />
-            {ws.settings.enabled
-              ? isDemo
-                ? "Lịch mẫu · chưa chạy"
-                : "Đã bật nhắc việc"
-              : "Đang tạm dừng"}
-          </small>
-          <button onClick={() => navigate("settings")}>
-            Điều chỉnh lịch
-            <ArrowUpRight size={13} />
-          </button>
-        </div>
-      </section>
+      <BrandHero
+        morning={ws.settings.morning}
+        evening={ws.settings.evening}
+        reminderEnabled={ws.settings.enabled && !isDemo}
+        busy={busy}
+        onReport={() => void makeReport()}
+        onSettings={() => navigate("settings")}
+        onIntroduce={() => navigate("introduce")}
+      />
       <section className="stats-grid">
         {[
           {
@@ -143,7 +75,7 @@ export function OverviewPage({
             value: active.length,
             icon: CheckSquare,
             color: "green",
-            note: `${active.filter((task) => task.kind !== "manual").length} việc từ Telegram`,
+            note: `${high} ưu tiên cao · ${active.filter((task) => task.kind !== "manual").length} từ Telegram`,
             trend: "tasks",
           },
           {
@@ -353,16 +285,16 @@ export function OverviewPage({
         <section className="focus-note">
           <span className="focus-label">
             <Sun size={17} />
-            MỘT NHỊP LÀM VIỆC TỐT
+            Cảm hứng mỗi ngày
           </span>
           <h3>
-            Đầu óc để nghĩ.
+            Xinh gái là một mood.
             <br />
-            BA Desk để nhớ.
+            Khí chất là của bạn.
           </h3>
           <p>
             Bản tin lúc {ws.settings.morning}. Rà soát lúc {ws.settings.evening}
-            . Để mỗi ngày bắt đầu rõ ràng và kết thúc nhẹ nhàng.
+            . Mình vẫn làm thật tốt, theo nhịp riêng của mình.
           </p>
           <button className="text-button" onClick={() => navigate("settings")}>
             Thiết lập nhắc việc

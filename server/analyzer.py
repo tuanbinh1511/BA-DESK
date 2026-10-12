@@ -147,6 +147,8 @@ def parse_export(payload, self_id, username):
                 name = item.get('file_name')
                 size = item.get('file_size')
                 messages[-1]['attachment'] = {'name': name if isinstance(name, str) and name else path.replace('\\', '/').rsplit('/', 1)[-1], 'path': path, 'mimeType': item.get('mime_type') if isinstance(item.get('mime_type'), str) else None, 'size': size if isinstance(size, int) and not isinstance(size, bool) and size >= 0 else None}
+                if item.get('media_type') in ('sticker', 'custom_emoji'):
+                    messages[-1]['attachment']['mediaType'] = 'sticker' if item['media_type'] == 'sticker' else 'emoji'
     if not messages:
         raise ValueError('File không chứa tin nhắn hợp lệ.')
     return messages, self_id

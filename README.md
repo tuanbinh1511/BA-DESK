@@ -6,7 +6,11 @@ Không gian làm việc cá nhân cho Business Analyst: tổng hợp Telegram th
 
 Frontend hỗ trợ `VITE_API_BASE_URL`; backend có chế độ `tailscale`, kiểm tra danh tính do Tailscale Serve cung cấp và chỉ chấp nhận host/origin đã cấu hình. Chế độ local mặc định vẫn hoạt động. Dữ liệu, phiên Telegram và AI nằm trên Mac.
 
-Cấu hình riêng của máy nằm trong `.local/remote.env` (backend) và `.env.remote.local` (frontend), được bỏ qua bởi Git. Khi đổi hostname hoặc tài khoản Tailscale, sửa hai file này. Chưa có domain Vercel; sau khi deploy, thêm đúng origin Vercel vào `BA_DESK_ALLOWED_ORIGINS`, rồi khởi động lại backend.
+Cấu hình riêng của máy nằm trong `.local/remote.env` (backend) và `.env.remote.local` (frontend), được bỏ qua bởi Git. Domain chính thức là `https://ba-desk.vercel.app`. Khi đổi hostname, tài khoản Tailscale hoặc domain, sửa cấu hình tương ứng và khởi động lại backend; đổi biến Vite cần build/deploy lại.
+
+`BA_DESK_TAILSCALE_LOGIN` là chủ sở hữu với quyền quản lý. `BA_DESK_TAILSCALE_ADMINS` là danh sách email Tailscale cách nhau bằng dấu phẩy có toàn quyền sử dụng workspace chung, bao gồm chỉnh sửa dữ liệu, cấu hình Telegram/bot và chạy AI; mặc định rỗng. `BA_DESK_TAILSCALE_VIEWERS` là danh sách email có quyền chỉ xem, mặc định rỗng. Người truy cập cần nhận lời mời chia sẻ Mac qua Tailscale. Giao diện chưa ẩn các nút theo vai trò; thao tác của người xem bị chặn sẽ báo chỉ có quyền xem.
+
+Từ lần gộp project, `BA-DESK` là thư mục chính cho code, database, Telegram session và cấu hình quyền. Đường dẫn `tool-telegram` cũ là liên kết tới `BA-DESK`; bản thư mục cũ được lưu trong `.ba-desk-migration-backups` bên ngoài project.
 
 Trong project BA-DESK, dừng backend cũ ở cổng 8000 trước rồi chạy:
 

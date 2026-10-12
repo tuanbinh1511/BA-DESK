@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 160">
+  <defs>
+    <radialGradient id="bg"><stop stop-color="#f9bdc7"/><stop offset="1" stop-color="#ed8697"/></radialGradient>
+    <radialGradient id="petal" cx=".25" cy=".2"><stop stop-color="#fff7f8"/><stop offset=".35" stop-color="#f9d3d9"/><stop offset=".7" stop-color="#df798a"/><stop offset="1" stop-color="#a93649"/></radialGradient>
+    <filter id="shadow"><feDropShadow dx="4" dy="8" stdDeviation="7" flood-color="#903443" flood-opacity=".25"/></filter>
+  </defs>
+  <rect width="280" height="160" fill="url(#bg)"/>
+  <g transform="translate(150 84)" fill="url(#petal)" filter="url(#shadow)">
+    <ellipse rx="36" ry="63" transform="rotate(0) translate(0 -22)"/>
+    <ellipse rx="36" ry="63" transform="rotate(60) translate(0 -22)"/>
+    <ellipse rx="36" ry="63" transform="rotate(120) translate(0 -22)"/>
+    <ellipse rx="36" ry="63" transform="rotate(180) translate(0 -22)"/>
+    <ellipse rx="36" ry="63" transform="rotate(240) translate(0 -22)"/>
+    <ellipse rx="36" ry="63" transform="rotate(300) translate(0 -22)"/>
+    <circle r="29"/>
+  </g>
+</svg>
