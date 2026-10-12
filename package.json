@@ -1,0 +1,26 @@
+{
+  "name": "ba-desk",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:ui": "vite --host 127.0.0.1",
+    "build": "tsc -b && vite build",
+    "test": "BA_DESK_AI_DISABLED=1 .venv/bin/python -m unittest discover -s server -p 'test_*.py'",
+    "start": ".venv/bin/python -m uvicorn server.app:app --host 127.0.0.1 --port 8000"
+  },
+  "dependencies": {
+    "@fontsource/manrope": "^5.2.8",
+    "@phosphor-icons/react": "^2.1.10",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.1.7"
+  }
+}
