@@ -1,6 +1,6 @@
 # Bước 3: cấu hình API và xác thực qua Tailscale
 
-Đây là hướng dẫn sửa code dựa trên phiên bản BA Desk đã đọc ngày 12/10/2026. Các đoạn dưới **chưa được áp dụng vào ứng dụng**. Chỉ dùng cho **Tailscale Serve riêng tư** và backend bind localhost; không dùng với Funnel/public tunnel.
+Đây là hướng dẫn sửa code dựa trên phiên bản BA Desk đã đọc ngày 12/10/2026. Phần API và middleware dưới đây **đã được áp dụng vào BA-DESK**; cấu hình riêng của máy đã được tạo. Các đoạn code là tài liệu tham chiếu, không cần chép lại. Chỉ dùng cho **Tailscale Serve riêng tư** và backend bind localhost; không dùng với Funnel/public tunnel.
 
 ## 3.1. Chuẩn bị
 
@@ -159,7 +159,7 @@ Backend chỉ tin danh tính do Serve gửi khi backend **bind localhost**. Serv
 Trong Terminal:
 
 ```bash
-cd /Users/tuanbinh1511/WorkSpace/tool-telegram
+cd /Users/tuanbinh1511/WorkSpace/BA-DESK
 mkdir -p .local
 chmod 700 .local
 ```
@@ -192,12 +192,12 @@ Chưa sửa backend theo 3.3–3.4 thì các biến trên chưa có tác dụng.
 Chạy trong Terminal **chưa source remote.env**, hoặc đặt rõ chế độ local cho bộ test:
 
 ```bash
-cd /Users/tuanbinh1511/WorkSpace/tool-telegram
+cd /Users/tuanbinh1511/WorkSpace/BA-DESK
 npm run build
 BA_DESK_REMOTE_MODE=local npm test
 ```
 
-Bộ test API hiện tại khởi động server con và không gửi danh tính Tailscale; nếu source remote.env rồi chạy npm test nguyên bản, test có thể bị chặn. Việc ép chế độ local giúp kiểm tra tương thích cũ; vẫn cần kiểm thử remote riêng ở bước tiếp theo.
+Bộ test API local đã ép chế độ local, bộ test remote riêng dùng database tạm để kiểm tra danh tính và CORS; source remote.env không làm test local bị chặn.
 
 Nếu TypeScript báo không có thuộc tính env: kiểm tra file `src/vite-env.d.ts`.
 
@@ -208,7 +208,7 @@ Dừng đúng backend cũ ở cổng 8000 trước (Ctrl+C trong Terminal đang 
 Terminal thứ nhất:
 
 ```bash
-cd /Users/tuanbinh1511/WorkSpace/tool-telegram
+cd /Users/tuanbinh1511/WorkSpace/BA-DESK
 source .local/remote.env
 npm start
 ```
@@ -229,7 +229,7 @@ Chỉ dùng HTTPS listener dành cho BA Desk; không ghi đè Serve của dịch
 Trong Terminal thứ ba, dùng URL thật:
 
 ```bash
-cd /Users/tuanbinh1511/WorkSpace/tool-telegram
+cd /Users/tuanbinh1511/WorkSpace/BA-DESK
 VITE_API_BASE_URL='https://macbook-tenban.ten-mang.ts.net' npm run dev:ui
 ```
 
@@ -325,5 +325,5 @@ Tắt Tailscale trên điện thoại rồi thử URL Serve: thiết bị không
 
 Sau đó mới thực hiện bước 4 về trạng thái offline và bước 5 deploy Vercel. Các test CORS/auth có thể tự động hóa trên database tạm theo cách test API hiện tại; bộ test local sẵn có chưa chứng minh remote an toàn.
 
-**Giới hạn:** mẫu được hướng dẫn cho một Mac đáng tin với Serve riêng tư. Chưa áp dụng mẫu vào code và chưa kiểm thử kết nối Tailscale thật trong lượt viết tài liệu này.
+**Giới hạn:** mẫu được hướng dẫn cho một Mac đáng tin với Serve riêng tư. Mẫu đã áp dụng vào code và có kiểm thử remote bằng database tạm; chưa xác minh kết nối HTTPS Tailscale thật.
 

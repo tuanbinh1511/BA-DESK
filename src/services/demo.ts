@@ -269,3 +269,12 @@ export function loadDemo(): Workspace {
   }
   return createDemo();
 }
+
+export function emptyWorkspace(): Workspace {
+  const defaults = createDemo();
+  return {
+    ...defaults, mode: "local", user: "Bạn", tasks: [], messages: [], groups: [],
+    events: [], notifications: [], reports: [],
+    settings: { ...defaults.settings, username: "" },
+  };
+}

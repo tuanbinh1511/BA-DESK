@@ -2,7 +2,37 @@
 
 Không gian làm việc cá nhân cho Business Analyst: tổng hợp Telegram theo ngày, giữ ngữ cảnh gốc, theo dõi việc được giao và tin cần phản hồi. Giao diện React + TypeScript + Vite; máy chủ Python + FastAPI + Telethon; lưu cục bộ bằng SQLite.
 
-## Chạy trên máy
+## Truy cập riêng qua Tailscale — đã cấu hình bước 3
+
+Frontend hỗ trợ `VITE_API_BASE_URL`; backend có chế độ `tailscale`, kiểm tra danh tính do Tailscale Serve cung cấp và chỉ chấp nhận host/origin đã cấu hình. Chế độ local mặc định vẫn hoạt động. Dữ liệu, phiên Telegram và AI nằm trên Mac.
+
+Cấu hình riêng của máy nằm trong `.local/remote.env` (backend) và `.env.remote.local` (frontend), được bỏ qua bởi Git. Khi đổi hostname hoặc tài khoản Tailscale, sửa hai file này. Chưa có domain Vercel; sau khi deploy, thêm đúng origin Vercel vào `BA_DESK_ALLOWED_ORIGINS`, rồi khởi động lại backend.
+
+Trong project BA-DESK, dừng backend cũ ở cổng 8000 trước rồi chạy:
+
+```bash
+npm run start:remote
+```
+
+Terminal khác, cấu hình Serve cho riêng BA Desk:
+
+```bash
+/Applications/Tailscale.app/Contents/MacOS/Tailscale serve --bg http://127.0.0.1:8000
+```
+
+Nếu CLI yêu cầu bật HTTPS, hoàn tất yêu cầu qua liên kết chính thức được CLI trả về. Serve chỉ dành cho mạng riêng; không dùng cấu hình này với Funnel. Mở `https://macbook-pro-ca-dang.tail4cfbc8.ts.net` bằng thiết bị đang bật Tailscale. Truy cập trực tiếp localhost bị chặn trong chế độ remote vì thiếu danh tính Serve.
+
+Để thử giao diện Vite riêng:
+
+```bash
+npm run dev:ui:remote
+```
+
+Mở `http://127.0.0.1:5173` trên Mac. Lệnh `npm run build:remote` tạo giao diện trỏ đến HTTPS API để deploy Vercel; `npm run build` vẫn tạo bản local. Không chạy thêm `npm run dev` khi backend remote đã chạy.
+
+Node.js 22+ được khuyến nghị. Nếu Terminal đang dùng Node 20.10, chạy `nvm use 22` nếu có nvm, rồi kiểm tra `node --version`. Bộ test dùng database tạm: test local luôn ép chế độ local, test remote kiểm tra CORS/danh tính/giới hạn riêng. Xem thêm [hướng dẫn triển khai](DEPLOYMENT_GUIDE.md).
+
+## Chạy local
 
 Yêu cầu Node.js 22+ và Python 3.11+.
 

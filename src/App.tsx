@@ -53,7 +53,7 @@ import {
   TaskForm,
 } from "./components/Forms";
 import { useWorkspace } from "./hooks/useWorkspace";
-import { api } from "./services/api";
+import { requireConnection, api } from "./services/api";
 import type {
   BAResource,
   CalendarEvent,
@@ -91,6 +91,8 @@ export default function App() {
     setWorkspace,
     refresh,
     serverAvailable,
+    connection,
+    lastUpdatedAt,
     desktopEnabled,
     enableDesktop,
   } = useWorkspace(day);
@@ -228,6 +230,15 @@ export default function App() {
     setInboxFilter("waiting");
   }, [ws.accountRevision]);
 
+  useEffect(() => {
+    if (connection === "forbidden") {
+      setSelectedTask(null);
+      setSelectedEvent(null);
+      setReport(null);
+      setModal(null);
+    }
+  }, [connection]);
+
   async function analyze(chatId?: string) {
     try {
       await api("/ai/analyze", {
@@ -255,6 +266,7 @@ export default function App() {
   }
   async function toggleGroup(group: TelegramGroup) {
     try {
+      requireConnection();
       if (!isDemo)
         await api(
           `/groups/${encodeURIComponent(group.id)}`,
@@ -287,6 +299,7 @@ export default function App() {
     >,
   ) {
     try {
+      requireConnection();
       if (!isDemo)
         await api(`/tasks/${encodeURIComponent(task.id)}`, patch, "PATCH");
       setWorkspace((previous) => ({
@@ -329,6 +342,7 @@ export default function App() {
       "title" | "project" | "description" | "priority" | "dueAt"
     >,
   ) {
+    requireConnection();
     const task = isDemo
       ? {
           ...data,
@@ -354,6 +368,7 @@ export default function App() {
     );
   }
   async function saveEvent(data: Omit<CalendarEvent, "id">) {
+    requireConnection();
     const event = isDemo
       ? { ...data, id: crypto.randomUUID() }
       : await api<CalendarEvent>("/events", data);
@@ -367,6 +382,7 @@ export default function App() {
   }
   async function removeTask(task: Task) {
     try {
+      requireConnection();
       if (!isDemo) await api(`/tasks/${task.id}`, undefined, "DELETE");
       setWorkspace((previous) => ({
         ...previous,
@@ -382,6 +398,7 @@ export default function App() {
   }
   async function removeEvent(event: CalendarEvent) {
     try {
+      requireConnection();
       if (!isDemo) await api(`/events/${event.id}`, undefined, "DELETE");
       setWorkspace((previous) => ({
         ...previous,
@@ -398,6 +415,7 @@ export default function App() {
   async function makeReport(open = true) {
     setBusy(true);
     try {
+      requireConnection();
       const next = isDemo
         ? {
             id: crypto.randomUUID(),
@@ -440,6 +458,7 @@ export default function App() {
   }
   async function readNotifications() {
     setModal("notifications");
+    if (!serverAvailable) return;
     try {
       if (!isDemo) await api("/notifications/read", {});
       setWorkspace((previous) => ({
@@ -480,7 +499,7 @@ export default function App() {
     </label>
   );
   const addButton = (
-    <button className="button primary" onClick={() => setModal("task")}>
+    <button className="button primary" disabled={!serverAvailable} onClick={() => setModal("task")}>
       <Plus size={18} weight="bold" />
       Thêm công việc
     </button>
@@ -562,7 +581,7 @@ export default function App() {
           </p>
           <button
             onClick={() => (ws.connected ? void sync() : setModal("connect"))}
-            disabled={ws.sync.running}
+            disabled={!serverAvailable || ws.sync.running}
           >
             {ws.connected ? "Đồng bộ tin nhắn" : "Kết nối Telegram"}
             <ArrowUpRight size={16} />
@@ -631,23 +650,24 @@ export default function App() {
           </div>
         </header>
         <main>
-          {(!serverAvailable || ws.sync.running || ws.sync.error) && (
-            <div
-              className={`system-banner ${ws.sync.error || !serverAvailable ? "warning-banner" : ""}`}
-              role="status"
-            >
-              {ws.sync.running ? (
-                <ArrowsClockwise className="spin" size={17} />
-              ) : (
-                <WarningCircle size={17} />
-              )}
-              {!serverAvailable
-                ? "Máy chủ chưa phản hồi. Chạy npm run dev để kết nối và lưu dữ liệu thật."
-                : ws.sync.running
-                  ? ws.sync.progress
-                  : ws.sync.error}
+          <div className={`connection-strip connection-${connection}`} role="status" aria-live="polite">
+            <div>
+              <strong>{connection === "connected" ? "Đã kết nối với Mac" : connection === "connecting" ? "Đang kết nối với Mac…" : connection === "forbidden" ? "Không có quyền truy cập" : "Mất kết nối · Chỉ đọc"}</strong>
+              <span>{connection === "forbidden"
+                ? "Kiểm tra tài khoản Tailscale và quyền truy cập. Dữ liệu đã được ẩn."
+                : lastUpdatedAt
+                  ? `Cập nhật lúc ${new Date(lastUpdatedAt).toLocaleTimeString("vi-VN")}${serverAvailable ? "" : ". Dữ liệu có thể chưa mới nhất; thao tác lưu đang tạm khóa."}`
+                  : "Chưa tải dữ liệu. Kiểm tra Tailscale và backend trên Mac."}</span>
+            </div>
+            {!serverAvailable && <button className="button secondary" onClick={() => void refresh()}>Thử kết nối lại</button>}
+          </div>
+          {(ws.sync.running || ws.sync.error) && (
+            <div className={`system-banner ${ws.sync.error ? "warning-banner" : ""}`} role="status">
+              {ws.sync.running ? <ArrowsClockwise className="spin" size={17} /> : <WarningCircle size={17} />}
+              {ws.sync.running ? ws.sync.progress : ws.sync.error}
             </div>
           )}
+          {lastUpdatedAt && <>
           <div className="page-heading">
             <div>
               <span className="eyebrow">
@@ -696,7 +716,7 @@ export default function App() {
                     <button
                       className="button secondary"
                       onClick={() => void makeReport(false)}
-                      disabled={busy}
+                      disabled={!serverAvailable || busy}
                     >
                       <DownloadSimple size={17} />
                       Xuất báo cáo
@@ -707,6 +727,7 @@ export default function App() {
               ) : page === "calendar" ? (
                 <button
                   className="button primary"
+                  disabled={!serverAvailable}
                   onClick={() => setModal("event")}
                 >
                   <Plus size={18} />
@@ -716,7 +737,7 @@ export default function App() {
                 <button
                   className="button primary"
                   onClick={() => void makeReport()}
-                  disabled={busy || ws.ai.running}
+                  disabled={!serverAvailable || busy || ws.ai.running}
                 >
                   <Sparkle size={17} />
                   Tạo báo cáo
@@ -725,7 +746,7 @@ export default function App() {
                 <button
                   className="button primary"
                   onClick={() => void sync()}
-                  disabled={ws.sync.running}
+                  disabled={!serverAvailable || ws.sync.running}
                 >
                   <ArrowsClockwise
                     size={17}
@@ -892,6 +913,7 @@ export default function App() {
               onDesktop={enableDesktop}
               onRefresh={() => refresh()}
               onSave={async (next) => {
+                requireConnection();
                 if (!isDemo) await api("/settings", next, "PUT");
                 setWorkspace((previous) => ({
                   ...previous,
@@ -949,6 +971,7 @@ export default function App() {
               <span className="footer-brand">ba desk</span>
             </span>
           </footer>
+          </>}
         </main>
       </div>
       {toast && (

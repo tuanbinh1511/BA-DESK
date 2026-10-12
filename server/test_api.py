@@ -24,7 +24,7 @@ class ApiTests(unittest.TestCase):
             sock.bind(('127.0.0.1', 0))
             port = sock.getsockname()[1]
         cls.base = f'http://127.0.0.1:{port}'
-        cls.process = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'server.app:app', '--host', '127.0.0.1', '--port', str(port)], env=os.environ | {'BA_DESK_DATA_DIR': cls.directory.name, 'BA_DESK_AI_DISABLED': '1'}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        cls.process = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'server.app:app', '--host', '127.0.0.1', '--port', str(port)], env=os.environ | {'BA_DESK_DATA_DIR': cls.directory.name, 'BA_DESK_AI_DISABLED': '1', 'BA_DESK_REMOTE_MODE': 'local'}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for _ in range(100):
             try:
                 with urlopen(cls.base + '/api/state', timeout=1):

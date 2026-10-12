@@ -2,7 +2,7 @@
 
 Phương án: Vercel chứa giao diện; Mac chứa FastAPI, Telegram, SQLite, tiến trình gọi Codex và bộ lịch. Trình duyệt gọi trực tiếp API qua Tailscale Serve; thiết bị truy cập phải bật Tailscale.
 
-**Trạng thái tài liệu:** hướng dẫn, không phải kết quả triển khai. Chưa cài Tailscale, chưa thay đổi code, chưa tạo LaunchAgent hay deploy Vercel trong lượt này. Code hiện tại chỉ cho localhost và chưa đọc các biến cấu hình remote được đề xuất bên dưới.
+**Trạng thái hiện tại:** bước 3 đã áp dụng trong BA-DESK, có cấu hình backend/frontend của máy và kiểm thử remote. Tailscale đã đăng nhập. Chưa bật Serve HTTPS, chưa tạo LaunchAgent và chưa deploy Vercel. Các phần hướng dẫn sửa code bên dưới là tham chiếu; không cần chép lại bước 3.
 
 ## 2. Cài Tailscale và thử kết nối
 
@@ -124,7 +124,7 @@ File: `server/app.py`. Hiện tại `TrustedHostMiddleware` và `local_only` ch�
 - **Local mặc định:** giữ hạn chế localhost như hiện tại.
 - **Remote qua Serve:** cho đúng host backend và đúng origin frontend, xác thực tài khoản Tailscale.
 
-Các biến sau là **tên đề xuất để implement**, chưa có tác dụng trong phiên bản hiện tại:
+Các biến sau đã được backend đọc; cấu hình riêng của máy nằm trong `.local/remote.env`:
 
 ```text
 BA_DESK_REMOTE_MODE=tailscale
@@ -162,7 +162,7 @@ Khi chạy chế độ remote, truy cập trên Mac bằng URL Serve. Nếu còn
 Chạy:
 
 ```bash
-cd /Users/tuanbinh1511/WorkSpace/tool-telegram
+cd /Users/tuanbinh1511/WorkSpace/BA-DESK
 npm run build
 npm test
 ```
@@ -182,7 +182,7 @@ Dùng các dòng `export KEY='value'` trong file để shell có thể đọc; g
 Khởi động backend với cấu hình remote và kiểm tra AI đã đăng nhập:
 
 ```bash
-cd /Users/tuanbinh1511/WorkSpace/tool-telegram
+cd /Users/tuanbinh1511/WorkSpace/BA-DESK
 codex login status
 source .local/remote.env
 npm start
@@ -199,9 +199,11 @@ tailscale serve status
 
 Mở URL Serve bằng Mac và điện thoại. Backend đã phục vụ bản build local nên có thể thử trước khi deploy Vercel.
 
-### 4.2. UX cần bổ sung
+### 4.2. UX đã bổ sung
 
-File chính: `src/hooks/useWorkspace.ts` và phần hiển thị trạng thái trong `src/App.tsx`.
+Đã triển khai và kiểm thử mất kết nối/403/kết nối lại bằng backend riêng. Hướng dẫn chạy và giới hạn: [STEP_4_GUIDE.md](./STEP_4_GUIDE.md).
+
+File chính: `src/hooks/useWorkspace.ts`, `src/services/api.ts` và phần hiển thị trạng thái trong `src/App.tsx`.
 
 - Hiển thị đang kết nối, đã kết nối, mất kết nối, không đủ quyền.
 - Giữ dữ liệu đang hiển thị khi ngắt mạng; ghi thời điểm cập nhật cuối.
@@ -222,7 +224,7 @@ Dùng CLI vì thư mục hiện tại chưa có Git repository; chưa cần tạ
 Chỉ chạy sau khi đã implement `VITE_API_BASE_URL`:
 
 ```bash
-cd /Users/tuanbinh1511/WorkSpace/tool-telegram
+cd /Users/tuanbinh1511/WorkSpace/BA-DESK
 VITE_API_BASE_URL='https://macbook-tenban.ten-mang.ts.net' npm run build
 ```
 
@@ -232,7 +234,7 @@ Thay URL ví dụ. Vite nhúng địa chỉ này khi build: đổi địa chỉ 
 
 ```bash
 mkdir -p /Users/tuanbinh1511/WorkSpace/ba-desk-web-deploy
-cp -R /Users/tuanbinh1511/WorkSpace/tool-telegram/dist/. /Users/tuanbinh1511/WorkSpace/ba-desk-web-deploy/
+cp -R /Users/tuanbinh1511/WorkSpace/BA-DESK/dist/. /Users/tuanbinh1511/WorkSpace/ba-desk-web-deploy/
 ```
 
 Thư mục này chỉ nên có `index.html`, `assets/`, các file tĩnh và cấu hình deploy; không có `.local`, `.venv`, `server`, `.env` hay credentials. Khi cập nhật, các asset cũ có thể còn lại; làm mới phần build trong thư mục này nhưng giữ liên kết project `.vercel`.
@@ -308,18 +310,18 @@ Tạo `scripts/start-local-service.sh` trong project với nội dung sau:
 #!/bin/sh
 set -eu
 
-cd /Users/tuanbinh1511/WorkSpace/tool-telegram
+cd /Users/tuanbinh1511/WorkSpace/BA-DESK
 export PATH="/Users/tuanbinh1511/.nvm/versions/node/v22.21.1/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-. /Users/tuanbinh1511/WorkSpace/tool-telegram/.local/remote.env
+. /Users/tuanbinh1511/WorkSpace/BA-DESK/.local/remote.env
 
-exec /Users/tuanbinh1511/WorkSpace/tool-telegram/.venv/bin/python \
+exec /Users/tuanbinh1511/WorkSpace/BA-DESK/.venv/bin/python \
   -m uvicorn server.app:app --host 127.0.0.1 --port 8000
 ```
 
-Script này chưa được tạo bởi lượt hướng dẫn. `remote.env` phải chứa các dòng `export` đã nói ở bước 4. Quyền file cấu hình:
+Script LaunchAgent này thuộc bước 6, chưa được tạo. Bước 3 đã có `scripts/start-remote.sh`, dùng đường dẫn tương đối để hỗ trợ đổi thư mục. `remote.env` phải chứa các dòng `export` đã nói ở bước 4. Quyền file cấu hình:
 
 ```bash
-chmod 600 /Users/tuanbinh1511/WorkSpace/tool-telegram/.local/remote.env
+chmod 600 /Users/tuanbinh1511/WorkSpace/BA-DESK/.local/remote.env
 mkdir -p /Users/tuanbinh1511/Library/LaunchAgents
 mkdir -p /Users/tuanbinh1511/Library/Logs/BA-Desk
 chmod 700 /Users/tuanbinh1511/Library/Logs/BA-Desk
@@ -340,10 +342,10 @@ Tạo file `/Users/tuanbinh1511/Library/LaunchAgents/local.ba-desk.backend.plist
   <key>ProgramArguments</key>
   <array>
     <string>/bin/sh</string>
-    <string>/Users/tuanbinh1511/WorkSpace/tool-telegram/scripts/start-local-service.sh</string>
+    <string>/Users/tuanbinh1511/WorkSpace/BA-DESK/scripts/start-local-service.sh</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>/Users/tuanbinh1511/WorkSpace/tool-telegram</string>
+  <string>/Users/tuanbinh1511/WorkSpace/BA-DESK</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
@@ -420,7 +422,7 @@ Lịch hiện tại có tạo bù những khung giờ đã qua trong ngày khi k
 Thực hiện backup bằng SQLite backup API, không chỉ chép file khi database đang được ghi. Ví dụ thao tác thủ công:
 
 ```bash
-cd /Users/tuanbinh1511/WorkSpace/tool-telegram
+cd /Users/tuanbinh1511/WorkSpace/BA-DESK
 .venv/bin/python - <<'PY'
 import os
 import sqlite3

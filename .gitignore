@@ -9,3 +9,7 @@ __pycache__/
 artifacts/
 .playwright-mcp/
 *.tsbuildinfo
+
+.env.*
+!.env.example
+.vercel

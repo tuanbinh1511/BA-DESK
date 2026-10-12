@@ -1,4 +1,5 @@
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -6,6 +7,7 @@ from typing import Literal
 from urllib.parse import urlparse
 from uuid import uuid4
 from fastapi import Depends, FastAPI, HTTPException, Request, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import AwareDatetime, BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -171,20 +173,57 @@ async def account_context(request: Request):
         raise HTTPException(409, 'Tài khoản đã đổi. Tải lại dữ liệu trước khi thao tác.')
 
 
+REMOTE_MODE = os.environ.get('BA_DESK_REMOTE_MODE', 'local').strip()
+REMOTE_LOGIN = os.environ.get('BA_DESK_TAILSCALE_LOGIN', '').strip()
+REMOTE_HOSTS = [value.strip() for value in os.environ.get('BA_DESK_ALLOWED_HOSTS', '').split(',') if value.strip()]
+REMOTE_ORIGINS = [value.strip().rstrip('/') for value in os.environ.get('BA_DESK_ALLOWED_ORIGINS', '').split(',') if value.strip()]
+
+if REMOTE_MODE not in ('local', 'tailscale'):
+    raise RuntimeError('BA_DESK_REMOTE_MODE phải là local hoặc tailscale.')
+
+if REMOTE_MODE == 'tailscale':
+    if not REMOTE_LOGIN or not REMOTE_HOSTS or not REMOTE_ORIGINS:
+        raise RuntimeError('Thiếu login, hosts hoặc origins cho chế độ Tailscale.')
+    if any('*' in host or '/' in host or ':' in host for host in REMOTE_HOSTS):
+        raise RuntimeError('Allowed hosts phải là hostname cụ thể, không chứa URL hoặc wildcard.')
+    for origin in REMOTE_ORIGINS:
+        parsed = urlparse(origin)
+        local_origin = parsed.hostname in ('127.0.0.1', 'localhost')
+        if (
+            not parsed.hostname or '*' in origin or parsed.username is not None
+            or parsed.password is not None or parsed.path or parsed.query or parsed.fragment
+            or (parsed.scheme != 'https' and not (local_origin and parsed.scheme == 'http'))
+        ):
+            raise RuntimeError('Allowed origins phải là origin HTTPS cụ thể hoặc HTTP localhost.')
+
 app = FastAPI(title='BA Desk', lifespan=lifespan, docs_url=None, redoc_url=None, dependencies=[Depends(account_context)])
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=['127.0.0.1', 'localhost', 'testserver'])
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=['127.0.0.1', 'localhost', 'testserver'] + (REMOTE_HOSTS if REMOTE_MODE == 'tailscale' else []),
+)
 
 
 @app.middleware('http')
 async def local_only(request: Request, call_next):
     origin = request.headers.get('origin')
-    if origin:
+    if REMOTE_MODE == 'tailscale':
+        if request.headers.get('tailscale-user-login') != REMOTE_LOGIN:
+            return JSONResponse(
+                {'detail': 'Chỉ tài khoản Tailscale được cấu hình mới được truy cập.'},
+                status_code=403,
+                headers={'Cache-Control': 'no-store'},
+            )
+        if origin and origin not in REMOTE_ORIGINS:
+            return JSONResponse({'detail': 'Origin không được phép.'}, status_code=403)
+    elif origin:
         parsed = urlparse(origin)
         if parsed.hostname not in ('localhost', '127.0.0.1') or parsed.scheme not in ('http', 'https'):
             return JSONResponse({'detail': 'Chỉ cho phép truy cập từ ứng dụng trên máy này.'}, status_code=403)
     try:
         content_length = int(request.headers.get('content-length', '0') or 0)
     except ValueError:
+        return JSONResponse({'detail': 'Kích thước yêu cầu không hợp lệ.'}, status_code=400)
+    if content_length < 0:
         return JSONResponse({'detail': 'Kích thước yêu cầu không hợp lệ.'}, status_code=400)
     if content_length > 12 * 1024 * 1024:
         return JSONResponse({'detail': 'File quá lớn. Export từng chat hoặc từng khoảng ngày (tối đa 12 MB).'}, status_code=413)
@@ -197,6 +236,16 @@ async def local_only(request: Request, call_next):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     return response
 
+
+# CORS ở ngoài lớp kiểm tra danh tính để trả lời preflight và gắn headers cho lỗi.
+if REMOTE_MODE == 'tailscale':
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=REMOTE_ORIGINS,
+        allow_credentials=False,
+        allow_methods=['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
+        allow_headers=['Content-Type', 'X-Account-Revision'],
+    )
 
 def validate_day(value):
     try:

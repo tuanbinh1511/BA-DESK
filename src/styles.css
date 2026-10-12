@@ -6211,3 +6211,12 @@ main {
     height: 40px;
   }
 }
+
+.connection-strip { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 18px; margin-bottom: 22px; border: 1px solid #d4e3d7; border-radius: 12px; background: #eff6f0; color: #28543b; }
+.connection-strip strong, .connection-strip span { display: block; }
+.connection-strip strong { font-size: 13px; line-height: 1.6; }
+.connection-strip span { font-size: 12px; line-height: 1.7; margin-top: 3px; }
+.connection-offline, .connection-forbidden { background: #fff6e9; border-color: #e8d4af; color: #77541e; }
+.connection-connecting { background: #f3f4f2; border-color: #d9ded7; color: #495646; }
+.connection-strip .button { flex-shrink: 0; }
+@media (max-width: 600px) { .connection-strip { align-items: stretch; flex-direction: column; gap: 10px; padding: 12px 14px; } .connection-strip .button { width: 100%; } }

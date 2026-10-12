@@ -1,12 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { api, setAccountRevision } from "../services/api";
-import { loadDemo } from "../services/demo";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { api, ApiError, getConnectionStatus, subscribeConnection, setConnectionStatus, setAccountRevision } from "../services/api";
+import { emptyWorkspace, loadDemo } from "../services/demo";
 import type { Workspace } from "../types";
 import { today } from "../utils/dates";
 
 export function useWorkspace(day: string) {
-  const [workspace, setWorkspace] = useState<Workspace>(loadDemo);
-  const [serverAvailable, setServerAvailable] = useState(true);
+  const [workspace, setWorkspace] = useState<Workspace>(emptyWorkspace);
+  const connection = useSyncExternalStore(subscribeConnection, getConnectionStatus);
+  const serverAvailable = connection === "connected";
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const loaded = useRef(false);
+  const failures = useRef(0);
   const currentDay = useRef(day);
   currentDay.current = day;
   const latestRequest = useRef(0);
@@ -21,8 +25,13 @@ export function useWorkspace(day: string) {
   const refresh = useCallback(
     async (requestedDay = day) => {
       const ticket = ++latestRequest.current;
+      if (!navigator.onLine) { setConnectionStatus("offline"); return; }
       try {
         const data = await api<Workspace>(`/state?day=${requestedDay}`);
+        if (!navigator.onLine) return;
+        if (!data || !Array.isArray(data.tasks) || !Array.isArray(data.messages) ||
+            !Number.isInteger(data.accountRevision) || !data.settings || !data.ai || !data.sync)
+          throw new ApiError("Dữ liệu không hợp lệ.", 502);
         if (
           requestedDay !== currentDay.current ||
           data.accountRevision < revision.current
@@ -35,22 +44,73 @@ export function useWorkspace(day: string) {
           return;
         revision.current = data.accountRevision;
         setAccountRevision(data.accountRevision);
-        setServerAvailable(true);
+        failures.current = 0;
+        setConnectionStatus("connected");
+        setLastUpdatedAt(new Date().toISOString());
         if (data.mode !== "demo" || data.connected) setWorkspace(data);
-      } catch {
-        if (ticket === latestRequest.current) setServerAvailable(false);
+        else if (!loaded.current) setWorkspace(loadDemo());
+        loaded.current = true;
+      } catch (error) {
+        if (ticket !== latestRequest.current || requestedDay !== currentDay.current) return;
+        failures.current += 1;
+        const forbidden = error instanceof ApiError && [401, 403].includes(error.status);
+        setConnectionStatus(forbidden ? "forbidden" : "offline");
+        if (forbidden) {
+          setWorkspace(emptyWorkspace());
+          loaded.current = false;
+          setLastUpdatedAt(null);
+        }
       }
     },
     [day],
   );
 
   useEffect(() => {
-    void refresh();
-    const interval = window.setInterval(() => void refresh(), 5000);
+    let stopped = false;
+    let running = false;
+    let timer: number | undefined;
+    async function poll() {
+      if (stopped || running || document.hidden || !navigator.onLine) return;
+      window.clearTimeout(timer);
+      running = true;
+      try { await refresh(); }
+      finally {
+        running = false;
+        if (!stopped && !document.hidden && navigator.onLine)
+          timer = window.setTimeout(() => void poll(), Math.min(30_000, 5_000 * 2 ** Math.min(failures.current, 3)));
+      }
+    }
+    function wake() {
+      window.clearTimeout(timer);
+      if (!document.hidden) void poll();
+    }
+    function offline() {
+      window.clearTimeout(timer);
+      setConnectionStatus("offline");
+    }
+    void poll();
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("online", wake);
+    window.addEventListener("focus", wake);
+    window.addEventListener("offline", offline);
     return () => {
-      window.clearInterval(interval);
+      stopped = true;
+      latestRequest.current += 1;
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("online", wake);
+      window.removeEventListener("focus", wake);
+      window.removeEventListener("offline", offline);
     };
   }, [refresh]);
+
+  useEffect(() => {
+    if (connection === "forbidden") {
+      setWorkspace(emptyWorkspace());
+      loaded.current = false;
+      setLastUpdatedAt(null);
+    }
+  }, [connection]);
 
   useEffect(() => {
     if (workspace.mode === "demo")
@@ -93,6 +153,8 @@ export function useWorkspace(day: string) {
     setWorkspace,
     refresh,
     serverAvailable,
+    connection,
+    lastUpdatedAt,
     desktopEnabled,
     enableDesktop,
   };

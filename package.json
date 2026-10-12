@@ -8,7 +8,11 @@
     "dev:ui": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "test": "BA_DESK_AI_DISABLED=1 .venv/bin/python -m unittest discover -s server -p 'test_*.py'",
-    "start": ".venv/bin/python -m uvicorn server.app:app --host 127.0.0.1 --port 8000"
+    "start": ".venv/bin/python -m uvicorn server.app:app --host 127.0.0.1 --port 8000",
+    "start:remote": "sh scripts/start-remote.sh",
+    "dev:ui:remote": "vite --host 127.0.0.1 --mode remote",
+    "build:remote": "tsc -b && vite build --mode remote",
+    "test:connection": "node scripts/test-connection.mjs"
   },
   "dependencies": {
     "@fontsource/manrope": "^5.2.8",
