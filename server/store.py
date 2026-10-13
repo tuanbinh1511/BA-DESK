@@ -62,6 +62,22 @@ def remove(kind, key):
         connection.execute('DELETE FROM records WHERE kind = ? AND id = ?', (kind, key))
 
 
+def set_task_status(keys, status, now):
+    with database() as connection:
+        tasks = []
+        for key in dict.fromkeys(keys):
+            row = connection.execute("SELECT data FROM records WHERE kind = 'task' AND id = ?", (key,)).fetchone()
+            if not row:
+                raise KeyError(key)
+            task = json.loads(row[0])
+            if task['status'] != status:
+                task.update(status=status, completedAt=now.isoformat() if status == 'done' else None)
+            tasks.append(task)
+        for task in tasks:
+            connection.execute("UPDATE records SET data = ? WHERE kind = 'task' AND id = ?", (json.dumps(task, ensure_ascii=False), task['id']))
+        return tasks
+
+
 def bind_account(account_id, mode='telegram', user='Bạn', username=''):
     account_id = str(account_id)
     previous = get('meta', 'accountId')

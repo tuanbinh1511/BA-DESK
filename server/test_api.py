@@ -80,6 +80,21 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.request('GET', '/state?day=' + tomorrow)[0], 200)
         self.assertEqual(self.request('POST', '/sync', {'day': tomorrow})[0], 422)
 
+    def test_batch_status_is_atomic_validated_and_can_reopen(self):
+        first = self.request('POST', '/tasks', {'title': 'Review BRD'})[1]
+        second = self.request('POST', '/tasks', {'title': 'Chốt UAT'})[1]
+        ids = [first['id'], second['id']]
+        self.assertEqual(self.request('POST', '/tasks/batch', {'ids': [ids[0], 'missing'], 'status': 'done'})[0], 404)
+        self.assertEqual(self.request('GET', '/state')[1]['tasks'][0]['status'], 'todo')
+        status, tasks = self.request('POST', '/tasks/batch', {'ids': ids + [ids[0]], 'status': 'done'})
+        self.assertEqual(status, 200)
+        self.assertEqual(len(tasks), 2)
+        self.assertTrue(all(task['completedAt'] and task['status'] == 'done' for task in tasks))
+        self.assertEqual(self.request('POST', '/tasks/batch', {'ids': [], 'status': 'done'})[0], 422)
+        self.assertEqual(self.request('POST', '/tasks/batch', {'ids': ids, 'status': 'invalid'})[0], 422)
+        reopened = self.request('POST', '/tasks/batch', {'ids': ids, 'status': 'todo'})[1]
+        self.assertTrue(all(task['completedAt'] is None and task['status'] == 'todo' for task in reopened))
+
     def test_library_search_validation_and_account_isolation(self):
         day = datetime.now(TZ).date().isoformat()
         payload = {'id': 99, 'type': 'personal_chat', 'name': 'Payment', 'messages': [{'id': 1, 'type': 'message', 'from': 'Minh Anh', 'from_id': 'user456', 'date': f'{day}T09:00:00', 'text': 'Review BRD Payment', 'file': 'files/BRD_v2.docx'}]}

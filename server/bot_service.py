@@ -1,6 +1,8 @@
 import asyncio
 import json
 import os
+import re
+import unicodedata
 from html import escape
 from datetime import datetime, timedelta
 from urllib.error import HTTPError, URLError
@@ -52,6 +54,16 @@ def message_parts(text):
         parts.append(text[:end])
         text = text[end:]
     return parts
+
+
+def completion_reply(text):
+    if '?' in text:
+        return False
+    text = unicodedata.normalize('NFKD', text.lower().replace('đ', 'd'))
+    text = ''.join(char for char in text if not unicodedata.combining(char))
+    text = re.sub(r'[^a-z0-9\s]', ' ', text)
+    text = ' '.join(text.split())
+    return bool(re.fullmatch(r'(?:(?:minh|toi|em|da|ok) )*(?:done|completed|finished|hoan thanh|xong)(?: (?:het|tat ca|roi|nhe|nha|a))*', text))
 
 
 def formatted_parts(notice, report=None):
@@ -117,7 +129,8 @@ class BotService:
     def state(self):
         config = self.config()
         delivery = store.get('meta', 'botStatus', {}) if config else {}
-        return {'configured': bool(config), 'username': config['username'] if config else '', 'error': delivery.get('error'), 'lastSentAt': delivery.get('lastSentAt')}
+        inbox = store.get('meta', 'botInbox', {}) if config else {}
+        return {'configured': bool(config), 'username': config['username'] if config else '', 'error': delivery.get('error') or inbox.get('error'), 'lastSentAt': delivery.get('lastSentAt')}
 
     async def configure(self, token, user_id):
         async with self.lock:
@@ -132,12 +145,92 @@ class BotService:
                 json.dump(config, file)
             os.chmod(path, 0o600)
             store.remove('meta', 'botStatus')
+            store.remove('meta', 'botInbox')
             return self.state()
 
     async def disconnect(self):
         async with self.lock:
             (store.DATA_DIR / 'telegram-bot.json').unlink(missing_ok=True)
             store.remove('meta', 'botStatus')
+            store.remove('meta', 'botInbox')
+
+    def complete_delivery(self, receipt, now):
+        keys = [key for key in receipt.get('taskIds', []) if store.get('task', key)]
+        count = sum(store.get('task', key)['status'] != 'done' for key in keys)
+        store.set_task_status(keys, 'done', now)
+        return count
+
+    async def receive(self, now, client=None):
+        async with self.lock:
+            config = self.config()
+            if not config or str(config['chatId']) != str(store.get('meta', 'accountId')):
+                return
+            inbox = store.get('meta', 'botInbox', {})
+            if inbox.get('retryAt') and datetime.fromisoformat(inbox['retryAt']) > now:
+                return
+            revision = store.get('meta', 'accountRevision', 0)
+            deliveries = {
+                message_id: receipt
+                for receipt in store.get_all('botDelivery')
+                if receipt.get('taskIds') and receipt.get('chatId') == config['chatId'] and receipt.get('botUsername') == config['username']
+                for message_id in receipt.get('messageIds', [])
+            }
+            try:
+                updates = await asyncio.to_thread(bot_request, config['token'], 'getUpdates', {
+                    'offset': inbox.get('offset', 0), 'timeout': 0,
+                    'allowed_updates': ['message', 'callback_query', 'message_reaction'],
+                })
+                if revision != store.get('meta', 'accountRevision', 0):
+                    return
+                for update in updates:
+                    if revision != store.get('meta', 'accountRevision', 0):
+                        return
+                    callback = update.get('callback_query')
+                    message = (callback or {}).get('message') or update.get('message', {})
+                    reaction = update.get('message_reaction', {})
+                    actor = (callback or {}).get('from') or message.get('from') or reaction.get('user', {})
+                    chat = message.get('chat') or reaction.get('chat', {})
+                    target = message.get('message_id') if callback else message.get('reply_to_message', {}).get('message_id') or reaction.get('message_id')
+                    requested = callback and callback.get('data') == 'done' or completion_reply(message.get('text', '')) or bool(reaction.get('new_reaction'))
+                    receipt = deliveries.get(target)
+                    if requested and receipt and actor.get('id') == config['chatId'] and chat.get('id') == config['chatId']:
+                        count = self.complete_delivery(receipt, now)
+                        if callback:
+                            await asyncio.to_thread(bot_request, config['token'], 'answerCallbackQuery', {
+                                'callback_query_id': callback['id'], 'text': f'Đã hoàn thành {count} công việc.' if count else 'Các việc này đã hoàn thành.',
+                            })
+                        elif message:
+                            await asyncio.to_thread(bot_request, config['token'], 'sendMessage', {
+                                'chat_id': config['chatId'], 'text': f'Đã hoàn thành {count} công việc trong thông báo.' if count else 'Các việc trong thông báo đã hoàn thành.',
+                                'reply_parameters': {'message_id': message['message_id']},
+                            })
+                    if revision != store.get('meta', 'accountRevision', 0):
+                        return
+                    inbox.update(offset=update['update_id'] + 1, error=None, retryAt=None)
+                    store.put('meta', 'botInbox', inbox)
+                if client and deliveries:
+                    # Private-chat reactions are read through the connected account; Bot API requires chat admin rights.
+                    pending = [key for key, receipt in deliveries.items() if key not in receipt.get('reactedMessageIds', []) and any(store.get('task', task_id, {}).get('status') not in (None, 'done') for task_id in receipt['taskIds'])]
+                    for start in range(0, len(pending), 100):
+                        messages = await client.get_messages(config['username'], ids=pending[start:start + 100])
+                        if revision != store.get('meta', 'accountRevision', 0):
+                            return
+                        for message in messages:
+                            if message and any(getattr(item, 'chosen_order', None) is not None for item in getattr(getattr(message, 'reactions', None), 'results', [])):
+                                receipt = deliveries[message.id]
+                                self.complete_delivery(receipt, now)
+                                # shortcut: a reaction completes each notification once; use the button or a new notice after reopening work.
+                                receipt.setdefault('reactedMessageIds', []).append(message.id)
+                                store.put('botDelivery', receipt['noticeId'], receipt)
+                store.put('meta', 'botInbox', inbox | {'error': None, 'retryAt': None})
+            except BotError as error:
+                if revision != store.get('meta', 'accountRevision', 0):
+                    return
+                store.put('meta', 'botInbox', inbox | {'error': str(error), 'retryAt': (now + timedelta(seconds=error.retry_after)).isoformat()})
+            except Exception:
+                if revision != store.get('meta', 'accountRevision', 0):
+                    return
+                store.put('meta', 'botInbox', inbox | {'error': 'Chưa đọc được phản hồi hoặc reaction. Kiểm tra kết nối Telegram.', 'retryAt': (now + timedelta(seconds=60)).isoformat()})
 
     async def flush(self, now, only_id=None):
         async with self.lock:
@@ -164,16 +257,23 @@ class BotService:
                     continue
                 if not receipt:
                     report = store.get('report', notice['id'])
-                    receipt = {'parts': formatted_parts(notice, report), 'parseMode': 'HTML', 'sent': 0, 'sentAt': None}
+                    task_ids = notice.get('taskIds', []) if not report else [task['id'] for person in report.get('people', []) for task in person['tasks'] if task['status'] != 'done' or task['replyStatus'] in ('unanswered', 'uncertain')]
+                    receipt = {'noticeId': notice['id'], 'parts': formatted_parts(notice, report), 'parseMode': 'HTML', 'sent': 0, 'sentAt': None, 'taskIds': task_ids, 'messageIds': [], 'chatId': config['chatId'], 'botUsername': config['username']}
+                    if task_ids:
+                        receipt['parts'] = [part + '\n\n<i>Reply “done” / “đã hoàn thành”, thả reaction hoặc bấm nút bên dưới để hoàn thành tất cả việc trong thông báo này.</i>' for part in receipt['parts']]
                 while receipt['sent'] < len(receipt['parts']):
                     if sent >= 4:
                         return
                     try:
-                        # ponytail: Bot API has no idempotency key; a lost acknowledgement can cause one duplicate on retry.
+                        # shortcut: Bot API has no idempotency key; reconcile delivery receipts if duplicate sends become a problem.
                         payload = {'chat_id': config['chatId'], 'text': receipt['parts'][receipt['sent']], 'link_preview_options': {'is_disabled': True}}
                         if receipt.get('parseMode'):
                             payload['parse_mode'] = receipt['parseMode']
-                        await asyncio.to_thread(bot_request, config['token'], 'sendMessage', payload)
+                        if receipt.get('taskIds'):
+                            payload['reply_markup'] = {'inline_keyboard': [[{'text': 'Hoàn thành tất cả', 'callback_data': 'done'}]]}
+                        result = await asyncio.to_thread(bot_request, config['token'], 'sendMessage', payload)
+                        if result.get('message_id'):
+                            receipt.setdefault('messageIds', []).append(result['message_id'])
                     except BotError as error:
                         store.put('botDelivery', notice['id'], receipt)
                         store.put('meta', 'botStatus', status | {'error': str(error), 'retryAt': (now + timedelta(seconds=error.retry_after)).isoformat()})

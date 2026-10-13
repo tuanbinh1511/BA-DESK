@@ -1,4 +1,12 @@
-import { lazy, Suspense, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import {
+  Flower,
+  FlowerLotus,
+  Heart,
+  Diamond,
+  Feather,
+} from "@phosphor-icons/react";
+import { IntroduceMuse, RosePetals } from "../components/IntroduceMuse";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
@@ -6,7 +14,34 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import "./introduce.css";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
-const Sculpture = lazy(() => import("../components/IntroduceSculpture"));
+function RibbonBow({ size }: { size: number; weight?: string }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M48 46C25 12 6 23 12 43c4 15 23 18 36 10M52 46c23-34 42-23 36-3-4 15-23 18-36 10"
+        fill="currentColor"
+        fillOpacity=".3"
+        stroke="currentColor"
+        strokeWidth="3"
+      />
+      <path
+        d="m43 53-14 30 12-4 7 8 4-33M55 53l16 30-12-4-7 8-4-33"
+        fill="currentColor"
+        fillOpacity=".4"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <rect x="43" y="40" width="15" height="19" rx="6" fill="currentColor" />
+    </svg>
+  );
+}
 const qualities = [
   {
     title: "Xinh gái",
@@ -15,6 +50,7 @@ const qualities = [
     detail: "Không gian đẹp để mỗi lần mở máy, bạn muốn bắt đầu ngày mới.",
     word: "beauty",
     className: "beauty",
+    icon: Flower,
   },
   {
     title: "Giỏi giang",
@@ -24,6 +60,7 @@ const qualities = [
       "Tin nhắn, tài liệu và đầu việc được đặt đúng chỗ — dành sự tập trung cho điều quan trọng.",
     word: "brilliance",
     className: "brilliance",
+    icon: RibbonBow,
   },
   {
     title: "Sang chảnh",
@@ -33,6 +70,7 @@ const qualities = [
       "Nhịp làm việc do bạn chọn. Không gian đủ tinh tế để đi cùng phiên bản tốt nhất của bạn.",
     word: "presence",
     className: "presence",
+    icon: Diamond,
   },
 ];
 const statements = [
@@ -47,7 +85,6 @@ export function IntroducePage({
   onOpenWorkspace: () => void;
 }) {
   const root = useRef<HTMLElement>(null);
-  const progress = useRef({ value: 0 });
   const reduced = useReducedMotion();
   const [active, setActive] = useState(0);
   const [quote, setQuote] = useState(0);
@@ -61,6 +98,70 @@ export function IntroducePage({
         },
         (context) => {
           if (!context.conditions?.motion) return;
+          const ambience = gsap.timeline();
+          gsap.utils
+            .toArray<HTMLElement>(".intro-petal-drift")
+            .forEach((petal, index) => {
+              gsap.set(petal, { left: `${(index * 37 + 9) % 100}%` });
+              ambience.add(
+                gsap.fromTo(
+                  petal.firstElementChild,
+                  { y: -30, x: -14, rotation: index * 23, opacity: 0 },
+                  {
+                    y: () =>
+                      (root.current?.querySelector(".intro-hero")
+                        ?.clientHeight ?? 750) + 40,
+                    x: 30 + (index % 4) * 18,
+                    rotation: index * 23 + 200,
+                    rotationY: 150,
+                    opacity: 0.55,
+                    duration: 12 + (index % 5) * 2,
+                    repeat: -1,
+                    delay: -index * 1.35,
+                    repeatRefresh: true,
+                    ease: "none",
+                  },
+                ),
+                0,
+              );
+            });
+          ambience.to(
+            ".intro-petal-drift",
+            {
+              x: 65,
+              rotation: 8,
+              duration: 3.5,
+              ease: "sine.inOut",
+              repeat: -1,
+              yoyo: true,
+              repeatDelay: 6,
+              stagger: 0.08,
+            },
+            0,
+          );
+          ambience.to(
+            ".intro-muse img",
+            {
+              y: -7,
+              rotation: -0.6,
+              duration: 4.5,
+              repeat: -1,
+              yoyo: true,
+              ease: "sine.inOut",
+            },
+            0,
+          );
+          let visible = true;
+          const pauseAmbience = () =>
+            ambience.paused(document.hidden || !visible);
+          const observer = new IntersectionObserver(([entry]) => {
+            visible = entry.isIntersecting;
+            pauseAmbience();
+          });
+          const hero = root.current?.querySelector(".intro-hero");
+          if (hero) observer.observe(hero);
+          document.addEventListener("visibilitychange", pauseAmbience);
+          pauseAmbience();
           gsap.from(".intro-hero-copy > *", {
             y: 28,
             opacity: 0,
@@ -81,13 +182,13 @@ export function IntroducePage({
           heroTimeline
             .fromTo(
               ".intro-art-scroll",
-              { scale: 0.8, opacity: 0.5 },
+              { scale: 0.92, opacity: 1 },
               { scale: 1, opacity: 1, ease: "none" },
             )
             .to(".intro-art-scroll", {
               scale: context.conditions.desktop ? 1.2 : 1.08,
               y: context.conditions.desktop ? -55 : 0,
-              rotationZ: -6,
+              rotationZ: -1.5,
               opacity: 0.25,
               ease: "none",
             });
@@ -97,16 +198,6 @@ export function IntroducePage({
               { y: -30, opacity: 0.35, ease: "none" },
               "<",
             );
-          gsap.to(progress.current, {
-            value: 1,
-            ease: "none",
-            scrollTrigger: {
-              trigger: ".intro-hero",
-              start: "top top",
-              end: "bottom top",
-              scrub: 1,
-            },
-          });
           gsap.utils
             .toArray<HTMLElement>(".intro-reveal")
             .forEach((section) => {
@@ -192,6 +283,10 @@ export function IntroducePage({
               },
             },
           );
+          return () => {
+            observer.disconnect();
+            document.removeEventListener("visibilitychange", pauseAmbience);
+          };
         },
       );
       let mounted = true;
@@ -201,7 +296,6 @@ export function IntroducePage({
       return () => {
         mounted = false;
         media.revert();
-        progress.current.value = 0;
       };
     },
     { scope: root },
@@ -223,6 +317,7 @@ export function IntroducePage({
         </div>
       </nav>
       <section className="intro-hero" aria-labelledby="intro-title">
+        <RosePetals />
         <div className="intro-hero-copy">
           <p className="intro-signature">Dành cho nàng Business Analyst</p>
           <h1 id="intro-title">
@@ -254,16 +349,7 @@ export function IntroducePage({
         </div>
         <div className="intro-art-scroll">
           <div className="intro-art-stage">
-            <Suspense
-              fallback={
-                <div className="sculpture-fallback">
-                  <span />
-                  <i />
-                </div>
-              }
-            >
-              <Sculpture progress={progress} />
-            </Suspense>
+            <IntroduceMuse />
           </div>
           <p className="intro-art-caption">
             Mềm mại trong hình dáng. Mạnh mẽ trong bản sắc.
@@ -315,9 +401,7 @@ export function IntroducePage({
                 <span aria-hidden="true">{active === index ? "−" : "+"}</span>
               </button>
               <div className="intro-quality-art" aria-hidden="true">
-                <span />
-                <i />
-                <b />
+                <item.icon size={90} weight="duotone" />
               </div>
               <h3>{item.subtitle}</h3>
               <p>{item.body}</p>
@@ -462,9 +546,7 @@ export function IntroducePage({
               className="intro-card-graphic graphic-orbits"
               aria-hidden="true"
             >
-              <i />
-              <i />
-              <i />
+              <FlowerLotus size={120} weight="duotone" />
             </div>
             <p>
               Nghe kỹ hơn. Nhìn sâu hơn. Tìm ra điều thực sự cần giải quyết.
@@ -481,9 +563,7 @@ export function IntroducePage({
               className="intro-card-graphic graphic-pages"
               aria-hidden="true"
             >
-              <i />
-              <i />
-              <i />
+              <Feather size={120} weight="duotone" />
             </div>
             <p>
               Tin nhắn và tài liệu luôn có nơi để tìm lại. Không bỏ lỡ những chi
@@ -501,8 +581,7 @@ export function IntroducePage({
               className="intro-card-graphic graphic-pearl"
               aria-hidden="true"
             >
-              <i />
-              <i />
+              <Heart size={120} weight="duotone" />
             </div>
             <p>
               Nhìn lại những điều đã làm. Dành phần còn lại của ngày cho chính

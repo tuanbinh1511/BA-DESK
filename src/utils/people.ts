@@ -2,7 +2,7 @@ import type { Task } from "../types";
 export function groupByPerson(tasks: Task[]) {
   const groups = new Map<string, { id: string; name: string; tasks: Task[] }>();
   for (const task of tasks) {
-    const id = task.senderId || `${task.sender}:${task.chatId || task.project}`;
+    const id = task.kind === "manual" ? "manual:self" : task.senderId || `${task.sender}:${task.chatId || task.project}`;
     const group = groups.get(id) || { id, name: task.sender, tasks: [] };
     group.tasks.push(task);
     groups.set(id, group);

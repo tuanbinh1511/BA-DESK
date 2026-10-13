@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import ts from 'typescript';
+const source = await readFile(new URL('../src/utils/people.ts', import.meta.url), 'utf8');
+const { outputText } = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } });
+const { groupByPerson } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+const task = { id: 'one', kind: 'manual', sender: 'Bạn', priority: 'medium', createdAt: '2026-10-13T09:00:00+07:00', project: 'A' };
+assert.equal(groupByPerson([task, { ...task, id: 'two', project: 'B' }]).length, 1, 'personal work stays in one conversation');
+const first = { ...task, kind: 'private', sender: 'An', senderId: '123' };
+const other = { ...first, id: 'two', senderId: '456' };
+assert.equal(groupByPerson([first, other]).length, 2, 'same display name never merges distinct people');
+const urgent = { ...first, id: 'urgent', project: 'B', priority: 'high' };
+const group = groupByPerson([first, urgent]);
+assert.equal(group.length, 1, 'one person across projects stays together');
+assert.equal(group[0].tasks[0].id, 'urgent', 'highest priority appears first');
+assert.equal(groupByPerson([]).length, 0);
+console.log('People checks passed: personal work, identity separation, cross-project grouping, priority, empty list.');

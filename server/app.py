@@ -95,6 +95,7 @@ async def automatic_sync(now, config, connected):
 async def scheduler_tick(now):
     config = settings()
     connected = await telegram.authorized()
+    await bot.receive(now, telegram.client if connected else None)
     await automatic_sync(now, config, connected)
     if store.get('meta', 'mode') not in ('telegram', 'import', 'local'):
         return
@@ -131,7 +132,7 @@ async def scheduled_reminders(now, config, connected):
         if due and datetime.fromisoformat(due) <= now:
             key = f'due-{task["id"]}-{due}'
             if not store.get('notification', key):
-                store.put('notification', key, {'id': key, 'chatId': task.get('chatId'), 'title': 'Đến giờ xử lý công việc', 'body': task['sender'] + ': ' + task['title'], 'createdAt': now.isoformat(), 'read': False})
+                store.put('notification', key, {'id': key, 'taskIds': [task['id']], 'chatId': task.get('chatId'), 'title': 'Đến giờ xử lý công việc', 'body': task['sender'] + ': ' + task['title'], 'createdAt': now.isoformat(), 'read': False})
     for event in store.get_all('event'):
         remaining = (datetime.fromisoformat(event['start']) - now).total_seconds()
         key = f'event-{event["id"]}-{event["start"]}'
@@ -456,6 +457,19 @@ class TaskPatch(BaseModel):
     replyStatus: Literal['unanswered', 'replied', 'uncertain', 'na'] | None = None
     priority: Literal['high', 'medium', 'low'] | None = None
     snoozedUntil: AwareDatetime | None = None
+
+
+class TaskBatch(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=500)
+    status: Literal['todo', 'doing', 'done']
+
+
+@app.post('/api/tasks/batch')
+async def batch_tasks(body: TaskBatch):
+    try:
+        return store.set_task_status(body.ids, body.status, datetime.now(TZ))
+    except KeyError:
+        raise HTTPException(404, 'Một công việc không còn tồn tại. Tải lại danh sách rồi thử lại.') from None
 
 
 @app.patch('/api/tasks/{key}')

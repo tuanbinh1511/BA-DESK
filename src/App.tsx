@@ -51,6 +51,7 @@ import type {
   Page,
   Report,
   Task,
+  TaskStatus,
   TelegramGroup,
 } from "./types";
 import {
@@ -343,6 +344,21 @@ export default function App() {
       notify(error instanceof Error ? error.message : "Không thể cập nhật.");
     }
   }
+  async function patchTasks(tasks: Task[], status: TaskStatus) {
+    requireConnection();
+    const now = new Date().toISOString();
+    const updated = isDemo
+      ? tasks.map((task) => ({ ...task, status, completedAt: status === "done" ? task.completedAt || now : null }))
+      : await api<Task[]>("/tasks/batch", { ids: tasks.map((task) => task.id), status });
+    const byId = new Map(updated.map((task) => [task.id, task]));
+    setWorkspace((previous) => ({
+      ...previous,
+      tasks: previous.tasks.map((task) => byId.get(task.id) ?? task),
+    }));
+    notify(`Đã cập nhật ${updated.length} công việc.`);
+    if (!isDemo) await refresh();
+  }
+
   async function saveTask(
     data: Pick<
       Task,
@@ -820,6 +836,7 @@ export default function App() {
 
           {page === "tasks" && (
             <TasksPage
+              key={`${day}-${ws.accountRevision}`}
               filter={filter}
               setFilter={setFilter}
               active={active}
@@ -828,6 +845,7 @@ export default function App() {
               visibleTasks={visibleTasks}
               setSelectedTask={setSelectedTask}
               patchTask={patchTask}
+              patchTasks={patchTasks}
               query={query}
             />
           )}

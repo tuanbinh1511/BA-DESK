@@ -241,6 +241,10 @@ export function SettingsPage({
               {bot.configured ? "Sẵn sàng" : "Chưa kết nối"}
             </span>
           </div>
+          {bot.configured && <p className="field-note bot-action-help">
+            Reply “done”, “đã hoàn thành”, “xong” hoặc bấm “Hoàn thành tất cả” để hoàn thành các việc trong thông báo đó.
+            Thả reaction cũng hoàn thành khi tài khoản Telegram đang kết nối. Máy chủ phải đang chạy để nhận cập nhật.
+          </p>}
           {bot.configured ? (
             <div className="integration-actions">
               <a

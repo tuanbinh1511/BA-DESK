@@ -107,6 +107,9 @@ Mặc định **08:30** và **17:00**, múi giờ **Asia/Ho_Chi_Minh**. Bạn c�
 - Bộ lịch kiểm tra mỗi 30 giây; mỗi báo cáo/nhắc hạn có ID cố định để tránh lặp. Nếu máy chủ khởi động muộn, báo cáo của các khung giờ đã qua trong ngày được tạo bù một lần.
 - Dùng dữ liệu import thì báo cáo dựa trên lịch sử đã nhập, cần nhập lại hoặc kết nối để cập nhật reply mới.
 - Tự tải tin và gửi qua bot có công tắc riêng, độc lập với bật/tắt lịch báo cáo. Nếu một hội thoại mất quyền đọc, báo cáo vẫn được tạo từ dữ liệu đọc được và ghi rõ phần chưa đầy đủ.
+- Với thông báo công việc gửi sau bản cập nhật này: reply `done`, `đã hoàn thành`, `xong` hoặc bấm **Hoàn thành tất cả** để đóng đúng các việc được gắn với thông báo. Báo cáo nhiều phần cùng trỏ đến toàn bộ việc trong báo cáo đó; công việc ngoài báo cáo không thay đổi. Bot chỉ nhận thao tác từ tài khoản đã kết nối.
+- Thả bất kỳ reaction nào vào thông báo cũng hoàn thành các việc liên quan khi tài khoản Telegram đang kết nối. Reaction chat riêng được đọc bằng Telethon vì [Bot API yêu cầu quyền quản trị để nhận sự kiện reaction](https://core.telegram.org/bots/api#update). Gỡ reaction không mở lại việc; sau khi mở lại, dùng nút hoặc một thông báo mới. Trạng thái hoàn thành không tự xác nhận đã trả lời người giao.
+- Màn **Công việc** có danh sách người giao và khu việc riêng, chọn tất cả theo bộ lọc, chọn theo người, hoàn thành/đang làm hàng loạt và mở lại từ tab Hoàn thành. Các cập nhật hàng loạt được lưu trong một giao dịch, tránh lưu dở nếu một việc không còn tồn tại.
 
 **Máy chủ phải đang chạy và máy tính phải thức để thực hiện lịch, tải tin và gửi bot.** Có thể đóng giao diện: máy chủ vẫn đồng bộ, tạo báo cáo và gửi Telegram. Thông báo cũng lưu trong biểu tượng chuông. Thông báo desktop cần quyền Notification và giao diện đang mở. Để điện thoại phát âm thanh/rung, bật thông báo cho bot trong Telegram.
 

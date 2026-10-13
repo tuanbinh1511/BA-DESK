@@ -508,3 +508,26 @@ html:has(.intro-mode) {
     transform: none;
   }
 }
+
+/* Focus belongs to the full field, including search icons and shortcuts. */
+input:not([type="checkbox"]):not([type="radio"]), textarea, select {
+  transition: border-color 180ms, box-shadow 180ms, background-color 180ms;
+}
+input:not([type="checkbox"]):not([type="radio"]):focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: #b3576b;
+  box-shadow: 0 0 0 3px #b3576b1c;
+}
+.search-box:focus-within, .library-search:focus-within {
+  outline: none;
+  border-color: #b3576b;
+  box-shadow: 0 0 0 3px #b3576b1c;
+  background: #fffaf8;
+}
+:is(.search-box, .library-search) input:not([type="checkbox"]):not([type="radio"]):focus { outline: none; box-shadow: none; }
+input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible {
+  outline: 2px solid #a74359;
+  outline-offset: 3px;
+}
+
+.bot-action-help { padding: 0 24px 18px; max-width: 65ch; line-height: 1.8; }

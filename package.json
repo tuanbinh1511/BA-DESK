@@ -12,7 +12,8 @@
     "start:remote": "sh scripts/start-remote.sh",
     "dev:ui:remote": "vite --host 127.0.0.1 --mode remote",
     "build:remote": "tsc -b && vite build --mode remote",
-    "test:connection": "node scripts/test-connection.mjs"
+    "test:connection": "node scripts/test-connection.mjs",
+    "test:people": "node scripts/test-people.mjs"
   },
   "dependencies": {
     "@fontsource/outfit": "^5.3.0",
