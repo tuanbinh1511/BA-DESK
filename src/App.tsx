@@ -88,8 +88,12 @@ const nav: { id: Page; title: string; icon: Icon }[] = [
 
 export default function App() {
   const reducedMotion = useReducedMotion();
-  const [page, setPage] = useState<Page>("overview"),
+  const [page, setPage] = useState<Page>(() => {
+    try { return localStorage.getItem("ba-desk-introduced") ? "overview" : "introduce"; }
+    catch { return "introduce"; }
+  }),
     [day, setDay] = useState(today);
+  const [shellPage, setShellPage] = useState(page);
   const {
     workspace: ws,
     setWorkspace,
@@ -184,8 +188,13 @@ export default function App() {
     toastTimer.current = window.setTimeout(() => setToast(""), 4500);
   }
   function navigate(next: Page) {
+    if (page === "introduce" && next !== "introduce") {
+      try { localStorage.setItem("ba-desk-introduced", "true"); } catch {}
+      history.replaceState(null, "", location.pathname + location.search);
+    }
     if (next !== "calendar" && day > today()) setDay(today());
     setPage(next);
+    if (!lastUpdatedAt) setShellPage(next);
     setFilter("all");
     setQuery("");
     setMenuOpen(false);
@@ -504,7 +513,7 @@ export default function App() {
   );
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${shellPage === "introduce" ? "intro-mode" : ""}`}>
       <a className="skip-link" href="#workspace-main">Đi đến nội dung</a>
       {menuOpen && (
         <div className="sidebar-overlay" onClick={() => setMenuOpen(false)} />
@@ -666,7 +675,7 @@ export default function App() {
             </div>
           )}
           {(lastUpdatedAt || page === "introduce") && <>
-          <AnimatePresence mode="wait" initial={false} key={ws.accountRevision}>
+          <AnimatePresence mode="wait" initial={false} key={ws.accountRevision} onExitComplete={() => setShellPage(page)}>
           <motion.div
             key={page}
             className="workspace-page"
@@ -823,7 +832,7 @@ export default function App() {
             />
           )}
 
-          {page === "inbox" && (
+          {page === "inbox" && inboxView === "action" && (
             <AIStatus ai={ws.ai} onAnalyze={() => analyze()} />
           )}
           {page === "inbox" && (
@@ -968,7 +977,7 @@ export default function App() {
               }}
             />
           )}
-          <footer className="main-footer">
+          {page !== "introduce" && <footer className="main-footer">
             <span>
               <span className="mini-dot" />
               {isDemo
@@ -981,7 +990,7 @@ export default function App() {
               Xinh gái, mỗi ngày. Khí chất, mãi mãi.
               <span className="footer-brand">ba desk</span>
             </span>
-          </footer>
+          </footer>}
           </Suspense>
           </motion.div>
           </AnimatePresence>

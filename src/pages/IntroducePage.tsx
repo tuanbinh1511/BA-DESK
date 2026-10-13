@@ -68,25 +68,35 @@ export function IntroducePage({
             duration: 0.9,
             ease: "power3.out",
           });
-          gsap
-            .timeline({
-              scrollTrigger: {
-                trigger: ".intro-hero",
-                start: "top 75%",
-                end: "bottom top",
-                scrub: 0.8,
-              },
-            })
+          const heroTimeline = gsap.timeline({
+            scrollTrigger: {
+              trigger: ".intro-hero",
+              start: context.conditions.desktop ? "top 72px" : "top 75%",
+              end: context.conditions.desktop ? "+=650" : "bottom top",
+              pin: !!context.conditions.desktop,
+              scrub: 0.8,
+              invalidateOnRefresh: true,
+            },
+          });
+          heroTimeline
             .fromTo(
               ".intro-art-scroll",
               { scale: 0.8, opacity: 0.5 },
               { scale: 1, opacity: 1, ease: "none" },
             )
             .to(".intro-art-scroll", {
-              scale: 1.08,
+              scale: context.conditions.desktop ? 1.2 : 1.08,
+              y: context.conditions.desktop ? -55 : 0,
+              rotationZ: -6,
               opacity: 0.25,
               ease: "none",
             });
+          if (context.conditions.desktop)
+            heroTimeline.to(
+              ".intro-hero-copy",
+              { y: -30, opacity: 0.35, ease: "none" },
+              "<",
+            );
           gsap.to(progress.current, {
             value: 1,
             ease: "none",
@@ -124,6 +134,18 @@ export function IntroducePage({
             },
           });
           if (context.conditions.desktop) {
+            gsap.to(".intro-story-track", {
+              xPercent: (-100 * 2) / 3,
+              ease: "none",
+              scrollTrigger: {
+                trigger: ".intro-workflow",
+                start: "top 72px",
+                end: "+=1200",
+                pin: true,
+                scrub: 0.8,
+                invalidateOnRefresh: true,
+              },
+            });
             const timeline = gsap.timeline({
               scrollTrigger: {
                 trigger: ".intro-desire",
@@ -156,6 +178,20 @@ export function IntroducePage({
                 "<",
               );
           }
+          gsap.fromTo(
+            ".intro-reading-progress",
+            { scaleX: 0 },
+            {
+              scaleX: 1,
+              ease: "none",
+              scrollTrigger: {
+                trigger: root.current,
+                start: "top top",
+                end: "bottom bottom",
+                scrub: 0.3,
+              },
+            },
+          );
         },
       );
       let mounted = true;
@@ -175,6 +211,7 @@ export function IntroducePage({
   return (
     <article ref={root} className="introduce-page">
       <nav className="intro-nav" aria-label="Điều hướng giới thiệu">
+        <span className="intro-reading-progress" aria-hidden="true" />
         <span className="intro-wordmark">
           ba desk <em>the pink edition</em>
         </span>
@@ -189,7 +226,9 @@ export function IntroducePage({
         <div className="intro-hero-copy">
           <p className="intro-signature">Dành cho nàng Business Analyst</p>
           <h1 id="intro-title">
-            Xinh gái là một vibe.
+            Xinh gái là một{" "}
+            <img className="intro-inline-rose" src="/rose-study.svg" alt="" />{" "}
+            vibe.
             <br />
             <em>Giỏi giang là khí chất.</em>
           </h1>
@@ -302,6 +341,77 @@ export function IntroducePage({
               </span>
             </motion.article>
           ))}
+        </div>
+      </section>
+      <section
+        className="intro-workflow intro-chapter"
+        aria-labelledby="workflow-title"
+      >
+        <div className="intro-workflow-copy">
+          <p>Đằng sau một BA có khí chất.</p>
+          <h2 id="workflow-title">
+            Nghe được điều khó nói.
+            <br />
+            <em>Làm rõ điều chưa rõ.</em>
+          </h2>
+          <p>
+            Từ một hội thoại nhỏ đến một quyết định có cơ sở. Mỗi bước đều có
+            dấu ấn của bạn.
+          </p>
+          <span>Tình huống minh hoạ · cuộn để đi tiếp</span>
+        </div>
+        <div className="intro-story-window">
+          <div className="intro-story-track">
+            <article className="intro-story-panel story-listen">
+              <p>Lắng nghe</p>
+              <h3>
+                Bắt đầu từ
+                <br />
+                đúng người.
+              </h3>
+              <div className="story-message">
+                <strong>Hà · Product</strong>
+                <p>
+                  “Mình cần làm rõ khi nào khách được huỷ đơn và hoàn tiền.”
+                </p>
+              </div>
+              <p>
+                Biết ai đang hỏi, hỏi trong dự án nào, và vì sao điều đó quan
+                trọng.
+              </p>
+            </article>
+            <article className="intro-story-panel story-clarify">
+              <p>Làm rõ</p>
+              <h3>
+                Đặt câu hỏi.
+                <br />
+                Kết nối ngữ cảnh.
+              </h3>
+              <dl>
+                <dt>Điều kiện</dt>
+                <dd>Đơn đã được bàn giao chưa?</dd>
+                <dt>Ngoại lệ</dt>
+                <dd>Nếu thanh toán một phần thì sao?</dd>
+                <dt>Kết quả</dt>
+                <dd>Khách nhận được thông báo gì?</dd>
+              </dl>
+              <p>Những câu hỏi nhỏ tạo nên một yêu cầu đủ sâu.</p>
+            </article>
+            <article className="intro-story-panel story-action">
+              <p>Đi đến hành động</p>
+              <h3>
+                Mỗi yêu cầu
+                <br />
+                có một bước tiếp.
+              </h3>
+              <div className="story-task">
+                <strong>Làm rõ luồng huỷ đơn</strong>
+                <span>Người gửi: Hà · Product</span>
+                <p>Cần làm: chốt điều kiện, ngoại lệ và tiêu chí nghiệm thu.</p>
+              </div>
+              <p>Giữ tin gốc bên cạnh công việc. Luôn biết bắt đầu từ đâu.</p>
+            </article>
+          </div>
         </div>
       </section>
       <section

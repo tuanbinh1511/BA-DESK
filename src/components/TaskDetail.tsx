@@ -10,7 +10,7 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 import type { Task, TaskStatus, TaskPatch } from "../types";
-import { clock, shortDate, priorityLabel } from "../utils/dates";
+import { clock, shortDate, priorityLabel, initials } from "../utils/dates";
 import { replyLabels, statusLabels } from "../utils/labels";
 import { Modal } from "./Modal";
 import { SectionHead } from "./WorkspaceUI";
@@ -41,6 +41,26 @@ export function TaskDetail({
       wide
     >
       <div className="task-detail">
+        <div className="detail-sender">
+          <span className={`avatar avatar-${selectedTask.sender.length % 4}`}>
+            {initials(selectedTask.sender)}
+          </span>
+          <div>
+            <small>
+              {selectedTask.kind === "manual"
+                ? "Người tạo công việc"
+                : "Người gửi yêu cầu"}
+            </small>
+            <strong>{selectedTask.sender}</strong>
+            <span>
+              {selectedTask.context.find(
+                (message) => message.id === selectedTask.sourceId,
+              )?.chat || selectedTask.project}{" "}
+              · {shortDate(selectedTask.createdAt)}{" "}
+              {clock(selectedTask.createdAt)}
+            </span>
+          </div>
+        </div>
         <div className="detail-eyebrow">
           <span className={`priority priority-${selectedTask.priority}`}>
             <span />
@@ -166,15 +186,28 @@ export function TaskDetail({
                   className={`conversation-message ${message.outgoing ? "outgoing" : ""} ${message.id === selectedTask.sourceId ? "source-message" : ""}`}
                 >
                   <div>
-                    <strong>{message.outgoing ? "Bạn" : message.sender}</strong>
+                    <strong>{message.sender}</strong>
+                    <span className="message-direction">
+                      {message.outgoing ? "Bạn gửi" : "Bạn nhận"}
+                    </span>
                     <time>
                       {clock(message.date)} · {shortDate(message.date)}
                     </time>
                     {message.id === selectedTask.sourceId && (
-                      <span>Tin gốc</span>
+                      <span className="message-source-flag">
+                        Tin gốc · Cần đọc
+                      </span>
                     )}
                   </div>
                   <p>{message.text}</p>
+                  {message.attachment && (
+                    <p className="message-attachment">
+                      Tệp đính kèm: {message.attachment.name}
+                    </p>
+                  )}
+                  <small className="conversation-location">
+                    {message.chat}
+                  </small>
                 </div>
               ))}
             </div>
