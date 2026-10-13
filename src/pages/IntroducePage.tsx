@@ -140,7 +140,7 @@ export function IntroducePage({
             0,
           );
           ambience.to(
-            ".intro-muse img",
+            ".intro-muse-portrait",
             {
               y: -7,
               rotation: -0.6,
@@ -171,8 +171,9 @@ export function IntroducePage({
           });
           const heroTimeline = gsap.timeline({
             scrollTrigger: {
+              id: "intro-hero-scroll",
               trigger: ".intro-hero",
-              start: context.conditions.desktop ? "top 72px" : "top 75%",
+              start: context.conditions.desktop ? "top 72px" : "top top",
               end: context.conditions.desktop ? "+=650" : "bottom top",
               pin: !!context.conditions.desktop,
               scrub: 0.8,
@@ -183,13 +184,20 @@ export function IntroducePage({
             .fromTo(
               ".intro-art-scroll",
               { scale: 0.92, opacity: 1 },
-              { scale: 1, opacity: 1, ease: "none" },
+              { scale: 1, opacity: 1, duration: 0.35, ease: "none" },
             )
+            .to(".intro-art-scroll", {
+              scale: 1.04,
+              y: context.conditions.desktop ? -15 : 0,
+              duration: 0.65,
+              ease: "none",
+            })
             .to(".intro-art-scroll", {
               scale: context.conditions.desktop ? 1.2 : 1.08,
               y: context.conditions.desktop ? -55 : 0,
               rotationZ: -1.5,
               opacity: 0.25,
+              duration: 0.3,
               ease: "none",
             });
           if (context.conditions.desktop)
